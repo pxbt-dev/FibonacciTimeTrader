@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⏰ Fibonacci Time Trader - Time Geometry Analysis</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>⏰ Fibonacci Time Trader</h1>
+        <p>Time Geometry Analysis & Vortex Windows</p>
+    </header>
+
+    <!-- Symbol Selector -->
+    <div class="symbol-selector">
+        <button class="symbol-btn active" data-symbol="BTC">BTC</button>
+        <button class="symbol-btn" data-symbol="SOL">SOL</button>
+        <button class="symbol-btn" data-symbol="TAO">TAO</button>
+        <button class="symbol-btn" data-symbol="WIF">WIF</button>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <p>Analyzing time geometry...</p>
+    </div>
+
+    <!-- Main Results -->
+    <div id="results" class="results" style="display: none;">
+
+        <!-- Next Vortex Window -->
+        <div class="vortex-card">
+            <h2>🎯 Next Vortex Window</h2>
+            <div id="nextVortex" class="vortex-info">
+                <!-- Dynamically filled -->
+            </div>
+        </div>
+
+        <!-- Fibonacci Projections Timeline -->
+        <div class="chart-card">
+            <h2>📅 Fibonacci Time Projections</h2>
+            <div id="fibonacciTimeline" class="fibonacci-timeline">
+                <!-- Timeline will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Vortex Windows Calendar -->
+        <div class="calendar-card">
+            <h2>🗓️ Vortex Windows Calendar</h2>
+            <div id="vortexCalendar" class="calendar">
+                <!-- Dynamically filled -->
+            </div>
+        </div>
+
+        <!-- Detailed Projections -->
+        <div class="projections-card">
+            <h2>📊 Detailed Projections</h2>
+            <div class="projections-grid">
+                <div class="projection-section">
+                    <h3>Fibonacci Projections</h3>
+                    <div id="fibonacciList" class="projection-list"></div>
+                </div>
+                <div class="projection-section">
+                    <h3>Gann Anniversaries</h3>
+                    <div id="gannList" class="projection-list"></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Error Message -->
+    <div id="error" class="error" style="display: none;">
+        <p>❌ Failed to load time geometry data. Please try again.</p>
+    </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
