@@ -18,12 +18,11 @@ public class TimeGeometryService {
     @Autowired
     private BinanceHistoricalService binanceHistoricalService;
 
-    private static final int[] FIBONACCI_SEQUENCE = {5, 8, 13, 21, 34, 55, 89, 144, 233};
+    private static final int[] FIBONACCI_SEQUENCE = {5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610};
 
     public VortexAnalysis analyzeSymbol(String symbol) {
-        log.info("⏰ Starting Time Geometry analysis for {}", symbol);
+        log.info("⏰ Starting EXTENDED Time Geometry analysis for {}", symbol);
 
-        // ✅ USE THE SIMPLIFIED BINANCE DATA - Call getHistoricalData()
         List<BinanceHistoricalService.OHLCData> historicalData = binanceHistoricalService.getHistoricalData(symbol);
 
         VortexAnalysis analysis = new VortexAnalysis();
@@ -34,31 +33,121 @@ public class TimeGeometryService {
             return analysis;
         }
 
-        log.info("📊 Using {} real Binance data points for {} time geometry",
-                historicalData.size(), symbol);
+        log.info("📊 Using {} extended data points for {} ({} years)",
+                historicalData.size(), symbol, historicalData.size() / 365);
 
-        // Use the data for analysis - pivot detection now uses OHLCData
-        List<PricePivot> pivots = findSignificantPivots(historicalData);
+        // Use weekly data for major cycle detection
+        List<BinanceHistoricalService.OHLCData> weeklyData = binanceHistoricalService.getWeeklyData(symbol);
 
-        analysis.setFibonacciTimeProjections(calculateFibonacciTimeProjections(pivots));
-        analysis.setGannDates(calculateGannDates(pivots));
+        List<PricePivot> majorPivots = findMajorCyclePivots(weeklyData);
+        List<PricePivot> recentPivots = findRecentPivots(historicalData);
+
+        List<PricePivot> allPivots = new ArrayList<>();
+        allPivots.addAll(majorPivots);
+        allPivots.addAll(recentPivots);
+
+        log.info("🎯 Found {} major + {} recent pivots for {}",
+                majorPivots.size(), recentPivots.size(), symbol);
+
+        // ✅ USE calculateExtendedProjections HERE
+        analysis.setFibonacciTimeProjections(calculateExtendedProjections(allPivots));
+        analysis.setGannDates(calculateGannDates(allPivots));
         analysis.setVortexWindows(identifyVortexWindows(analysis));
         analysis.setCompressionScore(calculateCompressionScore(historicalData));
         analysis.setConfidenceScore(calculateConfidenceScore(analysis));
 
-        log.info("✅ Time Geometry complete: {} projections, {} vortex windows",
+        log.info("✅ EXTENDED Time Geometry complete: {} projections, {} vortex windows",
                 analysis.getFibonacciTimeProjections().size(),
                 analysis.getVortexWindows().size());
 
         return analysis;
     }
 
-    private List<PricePivot> findSignificantPivots(List<BinanceHistoricalService.OHLCData> historicalData) {
+    // ✅ ADD THIS MISSING METHOD
+    private List<FibonacciTimeProjection> calculateExtendedProjections(List<PricePivot> allPivots) {
+        List<FibonacciTimeProjection> projections = new ArrayList<>();
+
+        if (allPivots.isEmpty()) return projections;
+
+        // Calculate projections from ALL pivots (major + recent)
+        for (PricePivot pivot : allPivots) {
+            for (int fib : FIBONACCI_SEQUENCE) {
+                LocalDate projectionDate = pivot.getDate().plusDays(fib);
+
+                // Only include future projections
+                if (!projectionDate.isBefore(LocalDate.now())) {
+                    FibonacciTimeProjection projection = new FibonacciTimeProjection();
+                    projection.setDate(projectionDate);
+                    projection.setFibonacciNumber(fib);
+                    projection.setSourcePivot(pivot);
+                    projection.setIntensity(calculateFibIntensity(fib) * pivot.getStrength());
+                    projection.setType(determineProjectionType(pivot.getType(), fib));
+                    projection.setDescription(String.format("F%d from %s at $%.2f",
+                            fib, pivot.getType().toLowerCase().replace("_", " "), pivot.getPrice()));
+
+                    projections.add(projection);
+                }
+            }
+        }
+
+        // Sort by date for cleaner output
+        return projections.stream()
+                .sorted(Comparator.comparing(FibonacciTimeProjection::getDate))
+                .collect(Collectors.toList());
+    }
+
+    // Enhanced major pivot detection for extended data
+    private List<PricePivot> findMajorCyclePivots(List<BinanceHistoricalService.OHLCData> weeklyData) {
+        List<PricePivot> majorPivots = new ArrayList<>();
+        if (weeklyData.size() < 20) return majorPivots;
+
+        // Larger window for major cycles in weekly data
+        int majorWindow = 26; // ~6 months in weekly data
+
+        for (int i = majorWindow; i < weeklyData.size() - majorWindow; i++) {
+            BinanceHistoricalService.OHLCData current = weeklyData.get(i);
+            boolean isMajorHigh = true;
+            boolean isMajorLow = true;
+
+            for (int j = i - majorWindow; j <= i + majorWindow; j++) {
+                if (j != i) {
+                    if (weeklyData.get(j).high() >= current.high()) isMajorHigh = false;
+                    if (weeklyData.get(j).low() <= current.low()) isMajorLow = false;
+                }
+            }
+
+            if (isMajorHigh) {
+                PricePivot pivot = new PricePivot(
+                        convertTimestampToDate(current.timestamp()),
+                        current.high(),
+                        "MAJOR_HIGH",
+                        0.95 // Very high strength for weekly pivots
+                );
+                majorPivots.add(pivot);
+                log.info("🎯 MAJOR WEEKLY HIGH: {} at ${}", pivot.getDate(), pivot.getPrice());
+            }
+
+            if (isMajorLow) {
+                PricePivot pivot = new PricePivot(
+                        convertTimestampToDate(current.timestamp()),
+                        current.low(),
+                        "MAJOR_LOW",
+                        0.95
+                );
+                majorPivots.add(pivot);
+                log.info("🎯 MAJOR WEEKLY LOW: {} at ${}", pivot.getDate(), pivot.getPrice());
+            }
+        }
+
+        return majorPivots;
+    }
+
+    private List<PricePivot> findRecentPivots(List<BinanceHistoricalService.OHLCData> historicalData) {
         List<PricePivot> pivots = new ArrayList<>();
 
-        if (historicalData.size() < 10) return pivots;
+        if (historicalData.size() < 5) return pivots;
 
-        // Simple pivot detection using OHLC data
+        // Your existing pivot detection logic for recent swings
         for (int i = 3; i < historicalData.size() - 3; i++) {
             BinanceHistoricalService.OHLCData current = historicalData.get(i);
 
@@ -72,7 +161,7 @@ public class TimeGeometryService {
                         convertTimestampToDate(current.timestamp()),
                         current.high(),
                         "HIGH",
-                        0.7 // Simple strength
+                        0.7
                 ));
             }
 
@@ -86,41 +175,12 @@ public class TimeGeometryService {
                         convertTimestampToDate(current.timestamp()),
                         current.low(),
                         "LOW",
-                        0.7 // Simple strength
+                        0.7
                 ));
             }
         }
 
-        return pivots.stream()
-                .sorted((a, b) -> b.getDate().compareTo(a.getDate())) // Most recent first
-                .limit(10) // Top 10 most recent pivots
-                .collect(Collectors.toList());
-    }
-
-    private List<FibonacciTimeProjection> calculateFibonacciTimeProjections(List<PricePivot> pivots) {
-        List<FibonacciTimeProjection> projections = new ArrayList<>();
-
-        if (pivots.isEmpty()) return projections;
-
-        // Use the most recent pivot for projections
-        PricePivot lastPivot = pivots.get(0);
-
-        for (int fib : FIBONACCI_SEQUENCE) {
-            LocalDate projectionDate = lastPivot.getDate().plusDays(fib);
-
-            FibonacciTimeProjection projection = new FibonacciTimeProjection();
-            projection.setDate(projectionDate);
-            projection.setFibonacciNumber(fib);
-            projection.setSourcePivot(lastPivot);
-            projection.setIntensity(calculateFibIntensity(fib));
-            projection.setType(determineProjectionType(lastPivot.getType(), fib));
-            projection.setDescription(String.format("F%d from %s pivot at $%.2f",
-                    fib, lastPivot.getType().toLowerCase(), lastPivot.getPrice()));
-
-            projections.add(projection);
-        }
-
-        return projections;
+        return pivots;
     }
 
     private List<GannDate> calculateGannDates(List<PricePivot> pivots) {
@@ -198,7 +258,7 @@ public class TimeGeometryService {
 
     // Helper methods
     private String determineProjectionType(String pivotType, int fibNumber) {
-        return pivotType.equals("HIGH") ? "RESISTANCE" : "SUPPORT";
+        return pivotType.equals("HIGH") || pivotType.equals("MAJOR_HIGH") ? "RESISTANCE" : "SUPPORT";
     }
 
     private double calculateFibIntensity(int fibNumber) {
