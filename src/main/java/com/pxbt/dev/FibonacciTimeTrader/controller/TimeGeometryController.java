@@ -1,46 +1,36 @@
 package com.pxbt.dev.FibonacciTimeTrader.controller;
 
 import com.pxbt.dev.FibonacciTimeTrader.model.VortexAnalysis;
-import com.pxbt.dev.FibonacciTimeTrader.model.VortexWindow;
 import com.pxbt.dev.FibonacciTimeTrader.service.TimeGeometryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
-import java.util.List;
-import java.util.stream.Collectors;
+import java.util.HashMap;
+import java.util.Map;
 
 @RestController
-@RequestMapping("/api/time-geometry")
+@RequestMapping("/api/timeGeometry")
 public class TimeGeometryController {
 
     @Autowired
     private TimeGeometryService timeGeometryService;
 
     @GetMapping("/analysis/{symbol}")
-    public ResponseEntity<VortexAnalysis> getAnalysis(@PathVariable String symbol) {
+    public ResponseEntity<?> getAnalysis(@PathVariable String symbol) {
         try {
             VortexAnalysis analysis = timeGeometryService.analyzeSymbol(symbol);
-            return ResponseEntity.ok(analysis);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("vortexWindows", analysis.getVortexWindows());
+            response.put("fibonacciTimeProjections", analysis.getFibonacciTimeProjections());
+            response.put("confidenceScore", analysis.getConfidenceScore());
+            response.put("compressionScore", analysis.getCompressionScore());
+
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.status(500).build();
+            return ResponseEntity.status(500)
+                    .body(Map.of("error", "Failed to analyze symbol", "message", e.getMessage()));
         }
-    }
-
-    @GetMapping("/upcoming-windows/{symbol}")
-    public ResponseEntity<List<VortexWindow>> getUpcomingWindows(
-            @PathVariable String symbol,
-            @RequestParam(defaultValue = "30") int daysAhead) {
-
-        VortexAnalysis analysis = timeGeometryService.analyzeSymbol(symbol);
-        LocalDate cutoff = LocalDate.now().plusDays(daysAhead);
-
-        List<VortexWindow> upcoming = analysis.getVortexWindows().stream()
-                .filter(window -> !window.getDate().isBefore(LocalDate.now()))
-                .filter(window -> !window.getDate().isAfter(cutoff))
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(upcoming);
     }
 }

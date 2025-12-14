@@ -77,18 +77,18 @@ public class BinanceHistoricalService {
         try {
             log.info("🔍 Fetching extended historical data for {}...", symbol);
 
-            // Strategy: Get weekly data for long-term + daily data for recent precision
+            // Get weekly data for long-term + daily data for recent precision
             List<OHLCData> weeklyData = fetchBinanceData(symbol, "1w", 500); // ~9.6 years of weekly
             List<OHLCData> dailyData = fetchBinanceData(symbol, "1d", 1000); // ~2.7 years of daily
 
             // Combine data - prefer daily for recent, weekly for long-term
             allData.addAll(dailyData);
 
-            // Add weekly data for older periods (before daily data coverage)
+            // Weekly data for older periods (before daily data coverage)
             if (!weeklyData.isEmpty() && !dailyData.isEmpty()) {
                 long dailyStartTime = dailyData.get(0).timestamp();
 
-                // Add weekly data points that are older than our daily data
+                // Weekly data points that are older than our daily data
                 for (OHLCData weeklyPoint : weeklyData) {
                     if (weeklyPoint.timestamp() < dailyStartTime) {
                         allData.add(weeklyPoint);

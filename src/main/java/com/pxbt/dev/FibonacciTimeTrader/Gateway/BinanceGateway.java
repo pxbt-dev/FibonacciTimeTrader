@@ -1,6 +1,7 @@
 package com.pxbt.dev.FibonacciTimeTrader.Gateway;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -19,7 +20,7 @@ public class BinanceGateway {
     @Value("${binance.api.klines-query-params}")
     private String klinesQueryParams;
 
-    public BinanceGateway(WebClient webClient) {
+    public BinanceGateway(@Qualifier("generalWebClient") WebClient webClient) {
         this.webClient = webClient;
     }
 

@@ -4,11 +4,11 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
+import java.time.*;
 import java.util.*;
 
-@Slf4j
 @Service
+@Slf4j
 public class BacktestService {
 
     private final TimeGeometryService timeGeometryService;
@@ -88,29 +88,44 @@ public class BacktestService {
     }
 
     /**
-     * Test Fibonacci projections
+     * Test Fibonacci projections - FIXED to calculate real sample sizes
      */
     public FibonacciPerformance backtestFibonacciProjections(String symbol) {
         log.info("🔬 Backtesting Fibonacci projections for {}", symbol);
 
         List<BinanceHistoricalService.OHLCData> historicalData = binanceHistoricalService.getHistoricalData(symbol);
-        Map<Integer, List<Double>> fibResults = new HashMap<>(); // Fib number -> price changes
 
-        // Initialize for common Fibonacci numbers
-        int[] fibNumbers = {5, 8, 13, 21, 34, 55, 89};
-        for (int fib : fibNumbers) {
-            fibResults.put(fib, new ArrayList<>());
+        if (historicalData == null || historicalData.size() < 500) { // Increased for longer projections
+            log.warn("Insufficient data for Fibonacci backtest: {} points",
+                    historicalData != null ? historicalData.size() : 0);
+            return createEmptyFibonacciPerformance(symbol);
         }
 
-        // Test each Fibonacci period
-        for (int i = 0; i < historicalData.size() - 90; i++) { // Need room for 89-day lookahead
+        // Use DOUBLE for ratios, store results keyed by ratio
+        Map<Double, List<Double>> fibResults = new HashMap<>();
+        double[] fibRatios = {0.382, 0.500, 0.618, 0.786, 1.000, 1.272, 1.618, 2.618};
+
+        for (double ratio : fibRatios) {
+            fibResults.put(ratio, new ArrayList<>());
+        }
+
+        // Base period in days
+        int basePeriod = 100; // 100 days = 1.0 ratio
+
+        // Test each Fibonacci ratio
+        for (int i = 0; i < historicalData.size() - (basePeriod * 3); i++) {
+            // Need room for longest projection (2.618 * 100 = 262 days)
             double priceAtStart = historicalData.get(i).close();
 
-            for (int fib : fibNumbers) {
-                if (i + fib < historicalData.size()) {
-                    double priceAtFib = historicalData.get(i + fib).close();
+            for (double ratio : fibRatios) {
+                // Convert ratio to days
+                int projectionDays = (int) Math.round(basePeriod * ratio);
+                int targetIndex = i + projectionDays;
+
+                if (targetIndex < historicalData.size()) {
+                    double priceAtFib = historicalData.get(targetIndex).close();
                     double change = calculateChange(priceAtStart, priceAtFib);
-                    fibResults.get(fib).add(change);
+                    fibResults.get(ratio).add(change);
                 }
             }
         }
@@ -118,12 +133,18 @@ public class BacktestService {
         FibonacciPerformance performance = new FibonacciPerformance();
         performance.setSymbol(symbol);
 
-        // Calculate statistics for each Fibonacci number
-        Map<Integer, FibStats> stats = new HashMap<>();
-        for (Map.Entry<Integer, List<Double>> entry : fibResults.entrySet()) {
-            if (!entry.getValue().isEmpty()) {
-                FibStats fibStats = calculateFibStats(entry.getValue());
-                stats.put(entry.getKey(), fibStats);
+        // Calculate statistics for each Fibonacci ratio
+        Map<Double, FibStats> stats = new HashMap<>();
+        for (double ratio : fibRatios) {
+            List<Double> changes = fibResults.get(ratio);
+            if (!changes.isEmpty()) {
+                FibStats fibStats = calculateFibStats(ratio, changes);
+                stats.put(ratio, fibStats);
+
+                int days = (int) Math.round(basePeriod * ratio);
+                log.info("Fibonacci {} ({} days): {} samples, {:.1f}% success, {:.1f}% avg return",
+                        String.format("%.3f", ratio), days, changes.size(),
+                        fibStats.getSuccessRate(), fibStats.getAverageChange());
             }
         }
 
@@ -131,51 +152,113 @@ public class BacktestService {
         return performance;
     }
 
+    private FibStats calculateFibStats(double ratio, List<Double> changes) {
+        FibStats stats = new FibStats();
+        stats.setRatio(ratio); // Store the actual ratio
+        stats.setSampleSize(changes.size());
+        stats.setAverageChange(changes.stream().mapToDouble(Double::doubleValue).average().orElse(0));
+        stats.setMaxChange(changes.stream().mapToDouble(Double::doubleValue).max().orElse(0));
+        stats.setMinChange(changes.stream().mapToDouble(Double::doubleValue).min().orElse(0));
+
+        // Calculate standard deviation
+        double mean = stats.getAverageChange();
+        double variance = changes.stream()
+                .mapToDouble(c -> Math.pow(c - mean, 2))
+                .average().orElse(0);
+        stats.setStdDev(Math.sqrt(variance));
+
+        // Success rate (positive changes)
+        double successRate = changes.stream()
+                .filter(c -> c > 0)
+                .count() * 100.0 / changes.size();
+        stats.setSuccessRate(successRate);
+
+        return stats;
+    }
+
     /**
-     * Test Gann anniversary dates (90, 180, 360 days)
+     * Test Gann anniversary dates (90, 180, 360 days) - CORRECTED VERSION
      */
     public GannPerformance backtestGannAnniversaries(String symbol) {
         log.info("🔬 Backtesting Gann anniversaries for {}", symbol);
 
         List<BinanceHistoricalService.OHLCData> historicalData = binanceHistoricalService.getHistoricalData(symbol);
-        Map<Integer, List<Double>> gannResults = new HashMap<>();
+
+        if (historicalData == null || historicalData.size() < 400) {
+            log.warn("Insufficient data for Gann backtest: {} points",
+                    historicalData != null ? historicalData.size() : 0);
+            return createEmptyGannPerformance(symbol);
+        }
+
+        // 1. Find ACTUAL pivot points (not every day!)
+        List<LocalDate> pivotDates = findSignificantPivots(historicalData, 10);
+        log.info("Found {} significant pivot points since {}",
+                pivotDates.size(),
+                pivotDates.isEmpty() ? "N/A" : pivotDates.get(0));
+
+        // 2. Test anniversaries from these pivots
+        Map<Integer, List<Double>> results = new HashMap<>();
+        Map<Integer, Integer> sampleSizes = new HashMap<>();
+
+        // Define Gann periods
         int[] gannPeriods = {90, 180, 360};
 
         for (int period : gannPeriods) {
-            gannResults.put(period, new ArrayList<>());
+            results.put(period, new ArrayList<>());
+            sampleSizes.put(period, 0);
         }
 
-        for (int i = 0; i < historicalData.size() - 365; i++) { // Need room for 360-day lookahead
-            double priceAtStart = historicalData.get(i).close();
+        for (LocalDate pivotDate : pivotDates) {
+            int pivotIndex = findDateIndex(historicalData, pivotDate);
 
-            for (int period : gannPeriods) {
-                if (i + period < historicalData.size()) {
-                    double priceAtAnniversary = historicalData.get(i + period).close();
-                    double change = calculateChange(priceAtStart, priceAtAnniversary);
-                    gannResults.get(period).add(change);
+            if (pivotIndex != -1) {
+                for (int period : gannPeriods) {
+                    int anniversaryIndex = pivotIndex + period;
+
+                    if (anniversaryIndex < historicalData.size()) {
+                        double startPrice = historicalData.get(pivotIndex).close();
+                        double endPrice = historicalData.get(anniversaryIndex).close();
+                        double returnPct = calculateChange(startPrice, endPrice);
+
+                        results.get(period).add(returnPct);
+                        sampleSizes.put(period, sampleSizes.get(period) + 1);
+                    }
                 }
             }
         }
 
-        GannPerformance performance = new GannPerformance();
-        performance.setSymbol(symbol);
-
+        // 3. Calculate REALISTIC statistics
         Map<Integer, Double> avgReturns = new HashMap<>();
         Map<Integer, Double> successRates = new HashMap<>();
 
         for (int period : gannPeriods) {
-            List<Double> changes = gannResults.get(period);
-            if (!changes.isEmpty()) {
-                double avgChange = changes.stream().mapToDouble(Double::doubleValue).average().orElse(0);
-                double successRate = changes.stream().filter(c -> c > 0).count() * 100.0 / changes.size();
+            List<Double> changes = results.get(period);
 
-                avgReturns.put(period, avgChange);
+            if (!changes.isEmpty()) {
+                double avgReturn = changes.stream()
+                        .mapToDouble(Double::doubleValue)
+                        .average()
+                        .orElse(0.0);
+                avgReturns.put(period, avgReturn);
+
+                double successRate = changes.stream()
+                        .filter(c -> c > 0)
+                        .count() * 100.0 / changes.size();
                 successRates.put(period, successRate);
+
+                log.info("Gann {} days: {} samples, {:.1f}% success, {:.1f}% avg return",
+                        period, changes.size(), successRate, avgReturn);
             }
         }
 
+        // 4. Build response
+        GannPerformance performance = new GannPerformance();
+        performance.setSymbol(symbol);
+        performance.setSampleSizes(sampleSizes);
         performance.setAverageReturns(avgReturns);
         performance.setSuccessRates(successRates);
+        performance.setTimestamp(System.currentTimeMillis());
+
         return performance;
     }
 
@@ -194,6 +277,67 @@ public class BacktestService {
     }
 
     // ===== HELPER METHODS =====
+
+    /**
+     * Find significant pivot points in price data
+     */
+    private List<LocalDate> findSignificantPivots(
+            List<BinanceHistoricalService.OHLCData> historicalData,
+            int lookbackDays) {
+
+        List<LocalDate> pivots = new ArrayList<>();
+
+        for (int i = lookbackDays; i < historicalData.size() - lookbackDays; i++) {
+            boolean isHigh = true;
+            boolean isLow = true;
+            double currentHigh = historicalData.get(i).high();
+            double currentLow = historicalData.get(i).low();
+
+            // Check surrounding window
+            for (int j = i - lookbackDays; j <= i + lookbackDays; j++) {
+                if (j == i) continue;
+
+                if (historicalData.get(j).high() > currentHigh) {
+                    isHigh = false;
+                }
+                if (historicalData.get(j).low() < currentLow) {
+                    isLow = false;
+                }
+
+                // Early exit if both false
+                if (!isHigh && !isLow) break;
+            }
+
+            if (isHigh || isLow) {
+                LocalDate pivotDate = Instant.ofEpochMilli(historicalData.get(i).timestamp())
+                        .atZone(ZoneId.systemDefault())
+                        .toLocalDate();
+                pivots.add(pivotDate);
+            }
+        }
+
+        log.info("Found {} significant pivot points", pivots.size());
+        return pivots;
+    }
+
+    /**
+     * Find index of a specific date in historical data
+     */
+    private int findDateIndex(
+            List<BinanceHistoricalService.OHLCData> data,
+            LocalDate targetDate) {
+
+        for (int i = 0; i < data.size(); i++) {
+            LocalDate currentDate = Instant.ofEpochMilli(data.get(i).timestamp())
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDate();
+
+            if (currentDate.equals(targetDate)) {
+                return i;
+            }
+        }
+        return -1;
+    }
 
     private List<SignalOutcome> analyzeDateOutcomes(LocalDate date, List<BinanceHistoricalService.OHLCData> historicalData) {
         // Placeholder - would run actual time geometry for historical date
@@ -254,7 +398,7 @@ public class BacktestService {
         return performance;
     }
 
-    private FibStats calculateFibStats(List<Double> changes) {
+    private FibStats calculateFibStats(int fibNumber, List<Double> changes) {
         FibStats stats = new FibStats();
         stats.setSampleSize(changes.size());
         stats.setAverageChange(changes.stream().mapToDouble(Double::doubleValue).average().orElse(0));
@@ -278,9 +422,26 @@ public class BacktestService {
     }
 
     private LocalDate toLocalDate(long timestamp) {
-        return java.time.Instant.ofEpochMilli(timestamp)
-                .atZone(java.time.ZoneId.systemDefault())
+        return Instant.ofEpochMilli(timestamp)
+                .atZone(ZoneId.systemDefault())
                 .toLocalDate();
+    }
+
+    private FibonacciPerformance createEmptyFibonacciPerformance(String symbol) {
+        FibonacciPerformance performance = new FibonacciPerformance();
+        performance.setSymbol(symbol);
+        performance.setFibonacciStats(new HashMap<>());
+        return performance;
+    }
+
+    private GannPerformance createEmptyGannPerformance(String symbol) {
+        GannPerformance performance = new GannPerformance();
+        performance.setSymbol(symbol);
+        performance.setSampleSizes(new HashMap<>());
+        performance.setAverageReturns(new HashMap<>());
+        performance.setSuccessRates(new HashMap<>());
+        performance.setTimestamp(System.currentTimeMillis());
+        return performance;
     }
 
     // ===== DATA MODELS =====
@@ -340,17 +501,28 @@ public class BacktestService {
     @Data
     public static class FibonacciPerformance {
         private String symbol;
-        private Map<Integer, FibStats> fibonacciStats;
+        private Map<Double, FibStats> fibonacciStats; // Keyed by ratio, not integer
     }
 
     @Data
     public static class FibStats {
+        private double ratio;           // The Fibonacci ratio (0.382, 0.618, etc.)
         private int sampleSize;
         private double averageChange;
         private double maxChange;
         private double minChange;
         private double stdDev;
         private double successRate; // Percentage of positive changes
+
+        // Helper to get label
+        public String getRatioLabel() {
+            return String.format("Fib %.3f", ratio);
+        }
+
+        // Helper to get days (assuming 100-day base)
+        public int getDays() {
+            return (int) Math.round(100 * ratio);
+        }
     }
 
     @Data
@@ -358,6 +530,8 @@ public class BacktestService {
         private String symbol;
         private Map<Integer, Double> averageReturns; // Period -> avg % return
         private Map<Integer, Double> successRates;   // Period -> % success
+        private Map<Integer, Integer> sampleSizes;   // Period -> number of samples
+        private Long timestamp;
     }
 
     @Data

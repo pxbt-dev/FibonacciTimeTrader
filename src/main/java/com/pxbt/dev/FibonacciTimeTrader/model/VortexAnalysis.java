@@ -15,7 +15,7 @@ public class VortexAnalysis {
     private double compressionScore;
     private double confidenceScore;
 
-    // Add constructor for convenience
+    // Constructor for convenience
     public VortexAnalysis() {
         this.analysisTime = LocalDate.now();
     }
