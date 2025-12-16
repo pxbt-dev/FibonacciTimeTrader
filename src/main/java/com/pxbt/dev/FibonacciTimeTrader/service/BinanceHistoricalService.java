@@ -29,7 +29,7 @@ public class BinanceHistoricalService {
 
     @PostConstruct
     public void init() {
-        log.info("📚 BinanceHistoricalService initializing for EXTENDED Time Geometry...");
+        log.info("📚 BinanceHistoricalService initializing for MAJOR CYCLE Time Geometry...");
         loadExtendedHistoricalData();
     }
 
@@ -43,21 +43,23 @@ public class BinanceHistoricalService {
                 List<OHLCData> extendedData = fetchExtendedHistoricalData(symbol);
                 allData.put(symbol, extendedData);
 
-                log.info("📊 {}: Loaded {} OHLC data points ({} years)",
-                        symbol, extendedData.size(), extendedData.size() / 365);
-
                 // Log the full date range
                 if (!extendedData.isEmpty()) {
                     LocalDate start = convertTimestampToDate(extendedData.get(0).timestamp());
                     LocalDate end = convertTimestampToDate(extendedData.get(extendedData.size()-1).timestamp());
                     long days = java.time.temporal.ChronoUnit.DAYS.between(start, end);
-                    log.info("📅 {} data range: {} to {} ({} days, {:.1f} years)",
-                            symbol, start, end, days, days / 365.0);
+                    double years = days / 365.0;
+
+                    // ✅ FIXED: Format the years before logging
+                    String formattedYears = String.format("%.1f", years);
+
+                    log.info("📊 {}: Loaded {} OHLC data points ({} to {}) - {} years",
+                            symbol, extendedData.size(), start, end, formattedYears);
                 }
             }
 
             currentData.putAll(allData);
-            log.info("✅ EXTENDED historical data loaded (5+ years per symbol)");
+            log.info("✅ Historical data loaded for {} symbols", symbols.length);
 
         } catch (Exception e) {
             log.error("❌ Failed to load extended historical data: {}", e.getMessage());
@@ -69,84 +71,163 @@ public class BinanceHistoricalService {
     }
 
     /**
-     * ✅ NEW: Fetch extended historical data using multiple API calls
+     * ✅ ENHANCED: Fetch 5+ years of historical data using multiple API calls
+     */
+    /**
+     * ✅ ENHANCED: Fetch 5+ years of historical data using multiple API calls
      */
     private List<OHLCData> fetchExtendedHistoricalData(String symbol) {
         List<OHLCData> allData = new ArrayList<>();
 
         try {
-            log.info("🔍 Fetching extended historical data for {}...", symbol);
+            log.info("🔍 Fetching 5+ YEARS of historical data for {}...", symbol);
 
-            // Get weekly data for long-term + daily data for recent precision
-            List<OHLCData> weeklyData = fetchBinanceData(symbol, "1w", 500); // ~9.6 years of weekly
-            List<OHLCData> dailyData = fetchBinanceData(symbol, "1d", 1000); // ~2.7 years of daily
+            // For BTC specifically, we need data back to 2018
+            if (symbol.equals("BTC")) {
+                log.info("💰 BTC: Fetching data back to 2018 for major cycle detection...");
 
-            // Combine data - prefer daily for recent, weekly for long-term
-            allData.addAll(dailyData);
+                // Strategy for BTC: Get 100 monthly points (over 8 years)
+                List<OHLCData> monthlyData = fetchBinanceData(symbol, "1M", 100); // 8+ years
 
-            // Weekly data for older periods (before daily data coverage)
-            if (!weeklyData.isEmpty() && !dailyData.isEmpty()) {
-                long dailyStartTime = dailyData.get(0).timestamp();
+                // Also get weekly for medium-term
+                List<OHLCData> weeklyData = fetchExtendedDataWithMultipleCalls(symbol, "1w", 400); // 7+ years
 
-                // Weekly data points that are older than our daily data
-                for (OHLCData weeklyPoint : weeklyData) {
-                    if (weeklyPoint.timestamp() < dailyStartTime) {
-                        allData.add(weeklyPoint);
+                // Daily for recent
+                List<OHLCData> dailyData = fetchExtendedDataWithMultipleCalls(symbol, "1d", 730); // 2 years
+
+                // Combine all
+                Set<Long> seenTimestamps = new HashSet<>();
+
+                for (OHLCData data : dailyData) {
+                    if (seenTimestamps.add(data.timestamp())) {
+                        allData.add(data);
                     }
                 }
-            } else if (!weeklyData.isEmpty()) {
-                // If no daily data, use weekly
-                allData.addAll(weeklyData);
+
+                for (OHLCData data : weeklyData) {
+                    if (seenTimestamps.add(data.timestamp())) {
+                        allData.add(data);
+                    }
+                }
+
+                for (OHLCData data : monthlyData) {
+                    if (seenTimestamps.add(data.timestamp())) {
+                        allData.add(data);
+                    }
+                }
+
+            } else {
+                // For other symbols, use original strategy
+                List<OHLCData> monthlyData = fetchBinanceData(symbol, "1M", 84);
+                List<OHLCData> weeklyData = fetchExtendedDataWithMultipleCalls(symbol, "1w", 260);
+                List<OHLCData> dailyData = fetchExtendedDataWithMultipleCalls(symbol, "1d", 730);
+
+                // Combine
+                Set<Long> seenTimestamps = new HashSet<>();
+
+                for (OHLCData data : dailyData) {
+                    if (seenTimestamps.add(data.timestamp())) {
+                        allData.add(data);
+                    }
+                }
+
+                for (OHLCData data : weeklyData) {
+                    if (seenTimestamps.add(data.timestamp())) {
+                        allData.add(data);
+                    }
+                }
+
+                for (OHLCData data : monthlyData) {
+                    if (seenTimestamps.add(data.timestamp())) {
+                        allData.add(data);
+                    }
+                }
             }
 
             // Sort by timestamp (oldest first)
             allData.sort(Comparator.comparing(OHLCData::timestamp));
 
-            log.info("✅ {}: Combined {} daily + {} weekly = {} total data points",
-                    symbol, dailyData.size(), weeklyData.size(), allData.size());
+            // Log the date range
+            if (!allData.isEmpty()) {
+                LocalDate start = convertTimestampToDate(allData.get(0).timestamp());
+                LocalDate end = convertTimestampToDate(allData.get(allData.size()-1).timestamp());
+                long days = java.time.temporal.ChronoUnit.DAYS.between(start, end);
+                double years = days / 365.0;
+
+                log.info("✅ {}: {} total data points from {} to {} {} years)",
+                        symbol, allData.size(), start, end, years);
+
+                if (symbol.equals("BTC") && years < 7.0) {
+                    log.warn("⚠️ BTC: Only {} years of data - may miss 2018 bear market low", years);
+                }
+            }
 
         } catch (Exception e) {
             log.error("❌ Extended data fetch failed for {}: {}", symbol, e.getMessage());
+
+            // Fallback
+            try {
+                List<OHLCData> weeklyData = fetchBinanceData(symbol, "1w", 260);
+                allData.addAll(weeklyData);
+                allData.sort(Comparator.comparing(OHLCData::timestamp));
+                log.info("✅ {}: Loaded {} weekly data points as fallback", symbol, weeklyData.size());
+            } catch (Exception ex) {
+                log.error("❌ Fallback also failed for {}: {}", symbol, ex.getMessage());
+            }
         }
 
         return allData;
     }
 
     /**
-     * ✅ ENHANCED: Fetch data with multiple calls for maximum history
+     * ✅ FIXED: Fetch data with multiple calls for maximum history
+     * Actually USES this method now
      */
     private List<OHLCData> fetchExtendedDataWithMultipleCalls(String symbol, String interval, int totalPoints) {
         List<OHLCData> allData = new ArrayList<>();
         int maxLimitPerCall = 1000; // Binance max per call
+
+        if (totalPoints <= maxLimitPerCall) {
+            // Single call is enough
+            return fetchBinanceData(symbol, interval, totalPoints);
+        }
+
         int callsNeeded = (int) Math.ceil((double) totalPoints / maxLimitPerCall);
 
-        log.info("🔄 Fetching {} points for {} {} in {} calls",
-                totalPoints, symbol, interval, callsNeeded);
+        log.info("🔄 Fetching {} {} data points for {} in {} calls",
+                totalPoints, interval, symbol, callsNeeded);
 
         try {
             for (int call = 0; call < callsNeeded; call++) {
                 int limit = Math.min(maxLimitPerCall, totalPoints - (call * maxLimitPerCall));
                 if (limit <= 0) break;
 
+                log.debug("📞 Call {}/{}: fetching {} {} points",
+                        call + 1, callsNeeded, limit, interval);
+
                 List<OHLCData> chunk = fetchBinanceData(symbol, interval, limit);
-                if (chunk.isEmpty()) break;
+                if (chunk.isEmpty()) {
+                    log.warn("⚠️ Empty response for {} {} on call {}/{}",
+                            symbol, interval, call + 1, callsNeeded);
+                    break;
+                }
 
                 allData.addAll(chunk);
 
                 // Small delay to avoid rate limiting
                 if (call < callsNeeded - 1) {
-                    Thread.sleep(200);
+                    Thread.sleep(300);
                 }
             }
 
-            // Remove duplicates and sort
-            allData = allData.stream()
-                    .distinct()
-                    .sorted(Comparator.comparing(OHLCData::timestamp))
-                    .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+            // Sort by timestamp
+            allData.sort(Comparator.comparing(OHLCData::timestamp));
+
+            log.info("✅ {}: Fetched {} {} data points via {} calls",
+                    symbol, allData.size(), interval, callsNeeded);
 
         } catch (Exception e) {
-            log.error("❌ Multi-call fetch failed for {}: {}", symbol, e.getMessage());
+            log.error("❌ Multi-call fetch failed for {} {}: {}", symbol, interval, e.getMessage());
         }
 
         return allData;
@@ -156,19 +237,67 @@ public class BinanceHistoricalService {
      * FOR TimeGeometryService - returns OHLC data for pivot detection
      */
     public List<OHLCData> getHistoricalData(String symbol) {
-        return new ArrayList<>(currentData.getOrDefault(symbol, new ArrayList<>()));
+        List<OHLCData> data = currentData.getOrDefault(symbol, new ArrayList<>());
+
+        // Log data availability
+        if (!data.isEmpty()) {
+            LocalDate start = convertTimestampToDate(data.get(0).timestamp());
+            LocalDate end = convertTimestampToDate(data.get(data.size()-1).timestamp());
+            long days = java.time.temporal.ChronoUnit.DAYS.between(start, end);
+
+            log.debug("📊 {}: Returning {} data points ({} to {}, {:.1f} years)",
+                    symbol, data.size(), start, end, days / 365.0);
+        }
+
+        return new ArrayList<>(data);
     }
 
     /**
-     * Get only weekly data for major cycle detection
+     * Get monthly data for major cycle detection
+     */
+    public List<OHLCData> getMonthlyData(String symbol) {
+        List<OHLCData> allData = getHistoricalData(symbol);
+        if (allData.isEmpty()) return allData;
+
+        // Extract approximate monthly data (every 30th point or by actual month)
+        List<OHLCData> monthlyData = new ArrayList<>();
+        LocalDate lastMonth = null;
+
+        for (OHLCData data : allData) {
+            LocalDate currentDate = convertTimestampToDate(data.timestamp());
+
+            if (lastMonth == null ||
+                    currentDate.getMonth() != lastMonth.getMonth() ||
+                    currentDate.getYear() != lastMonth.getYear()) {
+
+                monthlyData.add(data);
+                lastMonth = currentDate;
+            }
+        }
+
+        log.debug("📅 {}: Extracted {} monthly data points", symbol, monthlyData.size());
+        return monthlyData;
+    }
+
+    /**
+     * Get weekly data for major cycle detection
      */
     public List<OHLCData> getWeeklyData(String symbol) {
         List<OHLCData> allData = getHistoricalData(symbol);
-        // Filter to approximate weekly data (every 7th point from daily)
+        if (allData.isEmpty()) return allData;
+
+        // Extract approximate weekly data (every 7th point or by actual week)
         List<OHLCData> weeklyData = new ArrayList<>();
-        for (int i = 0; i < allData.size(); i += 7) {
-            weeklyData.add(allData.get(i));
+        int weekCounter = 0;
+
+        for (int i = 0; i < allData.size(); i++) {
+            if (i % 7 == 0) {
+                weeklyData.add(allData.get(i));
+                weekCounter++;
+            }
         }
+
+        log.debug("📅 {}: Extracted {} weekly data points", symbol, weeklyData.size());
         return weeklyData;
     }
 
@@ -178,10 +307,24 @@ public class BinanceHistoricalService {
     private List<OHLCData> fetchBinanceData(String symbol, String timeframe, int limit) {
         try {
             String binanceInterval = convertTimeframeToBinanceInterval(timeframe);
-            String response = binanceGateway.getRawKlines(symbol, binanceInterval, limit).block();
+
+            log.debug("📡 Fetching {} {} data for {} (limit: {})",
+                    symbol, timeframe, binanceInterval, limit);
+
+            String response = binanceGateway.getRawKlines(symbol, binanceInterval, limit)
+                    .blockOptional()
+                    .orElse("[]");
+
+            if (response == null || response.trim().isEmpty() || response.equals("[]")) {
+                log.warn("⚠️ Empty response for {} {}", symbol, timeframe);
+                return new ArrayList<>();
+            }
+
             return parseBinanceKlinesToOHLC(response);
+
         } catch (Exception e) {
-            log.error("❌ Failed to fetch Binance data for {} {}: {}", symbol, timeframe, e.getMessage());
+            log.error("❌ Failed to fetch Binance data for {} {}: {}",
+                    symbol, timeframe, e.getMessage());
             return new ArrayList<>();
         }
     }
@@ -191,6 +334,10 @@ public class BinanceHistoricalService {
      */
     private List<OHLCData> parseBinanceKlinesToOHLC(String response) {
         try {
+            if (response == null || response.trim().isEmpty() || response.equals("[]")) {
+                return new ArrayList<>();
+            }
+
             List<List<Object>> klines = objectMapper.readValue(response, new TypeReference<>() {});
             List<OHLCData> ohlcData = new ArrayList<>();
 

@@ -1,14 +1,8 @@
-/**
- * Fibonacci Time Trader - Pure Time Geometry Analysis
- */
-
 class TimeGeometryDashboard {
-
     constructor() {
         this.currentSymbol = 'BTC';
         this.charts = new Map();
         this.solarData = null;
-        this.timeGeometryData = null;
         this.lastUpdated = new Date();
     }
 
@@ -28,7 +22,7 @@ class TimeGeometryDashboard {
 
         // Update last updated time
         this.lastUpdated = new Date();
-        document.getElementById('lastUpdated').textContent = this.lastUpdated.toLocaleTimeString();
+        this.updateTimestamp();
 
         // Load new data
         this.loadAllData(symbol);
@@ -38,13 +32,7 @@ class TimeGeometryDashboard {
     async loadAllData(symbol) {
         console.log(`📊 Loading ALL data for ${symbol}...`);
 
-        const analysisContent = document.getElementById('analysisStats');
-        const upcomingSection = document.getElementById('upcomingDates');
-        const projectionsSection = document.getElementById('fibonacciProjections');
-        const timelineChart = document.getElementById('timelineChart');
-
         try {
-            // Load both data sources in parallel with timeout
             const controller1 = new AbortController();
             const controller2 = new AbortController();
             const timeoutId = setTimeout(() => {
@@ -67,63 +55,37 @@ class TimeGeometryDashboard {
                 throw new Error(`Time Geometry API Error: ${timeGeometryResponse.status}`);
             }
 
-            if (!solarResponse.ok) {
+            const analysis = await timeGeometryResponse.json();
+
+            // Load solar data if available
+            if (solarResponse.ok) {
+                this.solarData = await solarResponse.json();
+            } else {
                 console.warn('Solar API failed, continuing without solar data');
-                // Continue without solar data
-                const analysis = await timeGeometryResponse.json();
-                this.timeGeometryData = analysis;
                 this.solarData = null;
-
-                // Update UI components
-                this.renderUpcomingDates(analysis.vortexWindows || []);
-                this.renderFibonacciProjections(analysis.fibonacciTimeProjections || []);
-                this.renderSolarDashboard({ forecast: [], currentAp: 0, issueDate: 'Unavailable' });
-                this.createTimelineChart(analysis);
-
-                // Load Gann dates separately
-                this.loadGannDates(symbol);
-                return;
             }
-
-            const [analysis, solarForecast] = await Promise.all([
-                timeGeometryResponse.json(),
-                solarResponse.json()
-            ]);
-
-            this.timeGeometryData = analysis;
-            this.solarData = solarForecast;
 
             console.log('✅ ALL data loaded');
 
-            // Update all UI components
-            this.renderUpcomingDates(analysis.vortexWindows || []);
-            this.renderFibonacciProjections(analysis.fibonacciTimeProjections || []);
-            this.renderSolarDashboard(solarForecast);
+            // Update all UI components in order
             this.createTimelineChart(analysis);
-
-            // Load Gann dates separately (has its own API endpoint)
+            this.renderAlignmentDates(analysis.vortexWindows || []);
+            this.renderFibonacciLevels(analysis.fibonacciPriceLevels || []);
             this.loadGannDates(symbol);
+            this.renderSolarDashboard();
+
+            console.log('📊 Analysis data:', {
+                vortexWindows: analysis.vortexWindows?.length || 0,
+                fibonacciPriceLevels: analysis.fibonacciPriceLevels?.length || 0
+            });
 
         } catch (error) {
             console.error('❌ Failed to load ALL data:', error);
-
-            const errorMessage = error.name === 'AbortError' ?
-                'Request timeout: API took too long to respond' :
-                error.message;
-
-            if (analysisContent) {
-                analysisContent.innerHTML = `
-                    <div class="alert alert-danger">
-                        <h6><i class="fas fa-exclamation-triangle"></i> Data Error</h6>
-                        <p class="mb-1">${errorMessage}</p>
-                        <small>Check API endpoints</small>
-                    </div>
-                `;
-            }
+            this.showError(error);
         }
     }
 
-    // Load Gann dates from dedicated backend API
+    // FIXED: Load Gann dates with proper time range
     async loadGannDates(symbol) {
         const container = document.getElementById('gannDates');
         if (!container) return;
@@ -147,11 +109,15 @@ class TimeGeometryDashboard {
             const gannDates = await response.json();
             console.log(`✅ Gann dates received: ${gannDates.length} dates`);
 
+            // Log all dates for debugging
+            gannDates.forEach(gann => {
+                console.log(`📅 Gann Date: ${gann.date}, Type: ${gann.type}, Source: ${gann.sourcePivot?.date}`);
+            });
+
             this.renderGannDatesList(gannDates);
 
         } catch (error) {
             console.error('❌ Failed to load Gann dates:', error);
-
             container.innerHTML = `
                 <div class="alert alert-warning">
                     <i class="fas fa-exclamation-triangle me-2"></i>
@@ -162,7 +128,7 @@ class TimeGeometryDashboard {
         }
     }
 
-    // Render Gann dates list from API response
+    // FIXED: Render Gann dates including future dates
     renderGannDatesList(gannDates) {
         const container = document.getElementById('gannDates');
         if (!container) return;
@@ -177,14 +143,16 @@ class TimeGeometryDashboard {
             return;
         }
 
-        // Sort by date and take first 10
+        const now = new Date();
+
+        // Filter future dates and sort
         const futureDates = gannDates
             .filter(gann => {
                 const gannDate = new Date(gann.date);
-                return gannDate > new Date();
+                return gannDate > now;
             })
             .sort((a, b) => new Date(a.date) - new Date(b.date))
-            .slice(0, 10);
+            .slice(0, 15); // Show more dates
 
         if (futureDates.length === 0) {
             container.innerHTML = `
@@ -199,9 +167,10 @@ class TimeGeometryDashboard {
         container.innerHTML = futureDates.map(gann => {
             const period = gann.type ? gann.type.replace('D_ANNIVERSARY', 'D') : 'Gann';
             const sourcePivot = gann.sourcePivot || {};
+            const isRecent = this.isRecentDate(gann.date, 30);
 
             return `
-                <div class="date-card gann-date-card">
+                <div class="date-card gann-date-card ${isRecent ? 'border-warning' : ''}">
                     <div class="date">
                         ${this.formatDate(gann.date)}
                         <span class="badge bg-success float-end">
@@ -215,7 +184,7 @@ class TimeGeometryDashboard {
                                 ${sourcePivot.type || 'Pivot'}
                             </span>
                             <span class="badge bg-secondary ms-1">
-                                $${sourcePivot.price ? sourcePivot.price.toFixed(2) : 'N/A'}
+                                $${sourcePivot.price ? this.formatPrice(sourcePivot.price) : 'N/A'}
                             </span>
                         </div>
                         
@@ -224,10 +193,20 @@ class TimeGeometryDashboard {
                                 <i class="fas fa-arrow-right me-1"></i>
                                 From ${this.formatDate(sourcePivot.date)}
                             </div>
+                            <div class="mt-1">
+                                <span class="badge bg-dark">
+                                    ${this.daysFromNow(gann.date)}
+                                </span>
+                            </div>
                         </div>
                     ` : `
                         <div class="description text-muted">
                             Gann ${period.toLowerCase()} anniversary
+                            <div class="mt-1">
+                                <span class="badge bg-dark">
+                                    ${this.daysFromNow(gann.date)}
+                                </span>
+                            </div>
                         </div>
                     `}
                 </div>
@@ -235,115 +214,108 @@ class TimeGeometryDashboard {
         }).join('');
     }
 
-    // Render solar dashboard
-    renderSolarDashboard(forecast) {
-        const container = document.getElementById('solarDashboard');
-        if (!container || !forecast) return;
+    // Render Fibonacci levels separated by type
+    renderFibonacciLevels(priceLevels) {
+        const resistanceContainer = document.getElementById('resistanceLevels');
+        const supportContainer = document.getElementById('supportLevels');
 
-        const highApDays = forecast.forecast || [];
-        const currentAp = forecast.currentAp || 0;
-        const issueDate = forecast.issueDate || 'Unknown';
+        if (!priceLevels || priceLevels.length === 0) {
+            resistanceContainer.innerHTML = '<div class="alert alert-info">No resistance levels</div>';
+            supportContainer.innerHTML = '<div class="alert alert-info">No support levels</div>';
+            return;
+        }
 
-        container.innerHTML = `
-            <div class="glass-card-inner">
-                <div class="row mb-4">
-                    <div class="col-md-4">
-                        <div class="card ${currentAp >= 12 ? 'border-warning' : 'border-success'}">
-                            <div class="card-body text-center">
-                                <div class="display-4 fw-bold">${currentAp}</div>
-                                <div class="text-uppercase small">Current AP Index</div>
-                                <div class="mt-2">
-                                    <span class="badge ${currentAp >= 12 ? 'bg-warning' : 'bg-success'}">
-                                        ${currentAp >= 12 ? 'Elevated' : 'Normal'}
-                                    </span>
-                                </div>
-                            </div>
+        // Separate levels by type
+        const supportLevels = priceLevels.filter(level => level.type === 'SUPPORT');
+        const resistanceLevels = priceLevels.filter(level => level.type === 'RESISTANCE');
+
+        // Render resistance levels (LEFT COLUMN)
+        if (resistanceLevels.length > 0) {
+            // Sort resistance by price (lowest to highest)
+            resistanceLevels.sort((a, b) => a.price - b.price);
+
+            resistanceContainer.innerHTML = resistanceLevels.map(level => {
+                const formattedPrice = `$${this.formatPrice(level.price)}`;
+                const isKeyLevel = level.ratio === 1.618 || level.ratio === 2.618;
+
+                return `
+                <div class="date-card ${isKeyLevel ? 'key-level border-success' : 'border-success'}">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <span class="badge ${isKeyLevel ? 'bg-success' : 'bg-success'}">
+                                ${level.label}
+                            </span>
+                            ${isKeyLevel ? '<span class="badge bg-warning ms-1">Key</span>' : ''}
+                        </div>
+                        <div class="h5 mb-0 text-success">
+                            ${formattedPrice}
                         </div>
                     </div>
-                    
-                    <div class="col-md-4">
-                        <div class="card border-info">
-                            <div class="card-body text-center">
-                                <div class="display-4 fw-bold">${highApDays.length}</div>
-                                <div class="text-uppercase small">High AP Days (≥12)</div>
-                                <div class="mt-2">
-                                    <span class="badge ${highApDays.length > 0 ? 'bg-warning' : 'bg-success'}">
-                                        ${highApDays.length > 0 ? 'Active Period' : 'Quiet'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-4">
-                        <div class="card bg-dark text-white">
-                            <div class="card-body text-center">
-                                <div class="h2 mb-2">
-                                    <i class="fas fa-satellite"></i>
-                                </div>
-                                <div class="text-uppercase small">Forecast Source</div>
-                                <div class="mt-2 small">
-                                    NOAA 45-day<br>${issueDate}
-                                </div>
-                            </div>
+                    <div class="description">
+                        <i class="fas fa-arrow-up me-1 text-success"></i>
+                        ${level.distanceFromHigh} above cycle high
+                        <div class="mt-1 small">
+                            <span class="badge bg-secondary">Ratio: ${level.ratio.toFixed(3)}</span>
                         </div>
                     </div>
                 </div>
-                
-                ${highApDays.length > 0 ? `
-                    <div class="alert ${highApDays.length > 5 ? 'alert-warning' : 'alert-info'}">
-                        <i class="fas ${highApDays.length > 5 ? 'fa-exclamation-triangle' : 'fa-info-circle'} me-2"></i>
-                        <strong>${highApDays.length} days with AP ≥ 12 detected</strong>
-                        <div class="mt-2 small">
-                            Next high AP day: ${this.formatDate(highApDays[0]?.date)}
+                `;
+            }).join('');
+        } else {
+            resistanceContainer.innerHTML = '<div class="alert alert-info">No resistance levels available</div>';
+        }
+
+        // Render support levels (MIDDLE COLUMN)
+        if (supportLevels.length > 0) {
+            // Sort support by price (highest to lowest)
+            supportLevels.sort((a, b) => b.price - a.price);
+
+            supportContainer.innerHTML = supportLevels.map(level => {
+                const formattedPrice = `$${this.formatPrice(level.price)}`;
+                const isKeyLevel = level.ratio === 0.618 || level.ratio === 0.786;
+
+                return `
+                <div class="date-card ${isKeyLevel ? 'key-level border-danger' : 'border-danger'}">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <span class="badge ${isKeyLevel ? 'bg-danger' : 'bg-danger'}">
+                                ${level.label}
+                            </span>
+                            ${isKeyLevel ? '<span class="badge bg-info ms-1">Key</span>' : ''}
+                        </div>
+                        <div class="h5 mb-0 text-danger">
+                            ${formattedPrice}
                         </div>
                     </div>
-                ` : `
-                    <div class="alert alert-success">
-                        <i class="fas fa-check-circle me-2"></i>
-                        <strong>Quiet geomagnetic period</strong>
-                        <div class="mt-1 small">No days with AP ≥ 12 in the forecast</div>
-                    </div>
-                `}
-                
-                <!-- High AP Days List -->
-                ${highApDays.length > 0 ? `
-                    <div class="mt-4">
-                        <h5><i class="fas fa-list me-2"></i>High AP Dates (AP ≥ 12)</h5>
-                        <div class="table-responsive">
-                            <table class="table table-sm">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>AP Index</th>
-                                        <th>Days From Now</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${highApDays.slice(0, 10).map(day => `
-                                        <tr>
-                                            <td>${this.formatDate(day.date)}</td>
-                                            <td><span class="badge ${day.ap >= 20 ? 'bg-danger' : 'bg-warning'}">${day.ap}</span></td>
-                                            <td>${this.daysFromNow(day.date)}</td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
+                    <div class="description">
+                        <i class="fas fa-arrow-down me-1 text-danger"></i>
+                        ${level.distanceFromHigh} from cycle high
+                        <div class="mt-1 small">
+                            <span class="badge bg-secondary">Ratio: ${level.ratio.toFixed(3)}</span>
+                            ${level.ratio === 0 ? '<span class="badge bg-dark ms-1">Cycle High</span>' : ''}
+                            ${level.ratio === 1.0 ? '<span class="badge bg-dark ms-1">Cycle Low</span>' : ''}
                         </div>
-                        ${highApDays.length > 10 ? `<div class="text-center small text-muted mt-2">+ ${highApDays.length - 10} more days</div>` : ''}
                     </div>
-                ` : ''}
-            </div>
-        `;
+                </div>
+                `;
+            }).join('');
+        } else {
+            supportContainer.innerHTML = '<div class="alert alert-info">No support levels available</div>';
+        }
     }
 
-    // Render upcoming alignment dates (grouped by date)
-    renderUpcomingDates(alignmentDates) {
+    // FIXED: Enhanced alignment dates rendering with expandable details
+    renderAlignmentDates(alignmentDates) {
         const container = document.getElementById('upcomingDates');
         if (!container) return;
 
         if (!alignmentDates || alignmentDates.length === 0) {
-            container.innerHTML = '<div class="alert alert-info">No Fibonacci/Gann alignment dates detected</div>';
+            container.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="fas fa-calendar-check me-2"></i>
+                    No Fibonacci/Gann alignment dates detected
+                </div>
+            `;
             return;
         }
 
@@ -384,7 +356,14 @@ class TimeGeometryDashboard {
             return;
         }
 
-        container.innerHTML = futureDates.map(group => {
+        // Clear container and create row
+        container.innerHTML = '';
+
+        // Create cards in a grid layout
+        futureDates.forEach((group, index) => {
+            const col = document.createElement('div');
+            col.className = 'col-lg-4 col-md-6 mb-3';
+
             const date = new Date(group.date);
             const hasMultiple = group.alignments.length > 1;
 
@@ -396,11 +375,15 @@ class TimeGeometryDashboard {
                 allSignals.push(...signals);
             });
 
-            // Remove duplicates
+            // Remove duplicates and categorize
             const uniqueSignals = Array.from(new Set(allSignals.map(s => s.label)))
                 .map(label => allSignals.find(s => s.label === label));
 
-            return `
+            const fibSignals = uniqueSignals.filter(s => s.type === 'fibonacci');
+            const gannSignals = uniqueSignals.filter(s => s.type === 'gann');
+            const otherSignals = uniqueSignals.filter(s => s.type === 'other');
+
+            col.innerHTML = `
                 <div class="date-card ${group.maxIntensity > 0.8 ? 'vortex-highlight' : ''}">
                     <div class="date">
                         ${this.formatDate(group.date)}
@@ -411,208 +394,84 @@ class TimeGeometryDashboard {
                         </span>
                     </div>
                     
-                    <!-- Main signals display -->
                     <div class="converging-signals mb-2">
                         <div class="d-flex align-items-center mb-1">
                             <small class="text-muted me-2">Signals:</small>
                             ${uniqueSignals.slice(0, 3).map(signal =>
-                `<span class="badge ${signal.type === 'fibonacci' ? 'bg-primary' : 'bg-success'} me-1">${signal.label}</span>`
+                `<span class="badge ${signal.type === 'fibonacci' ? 'bg-primary' : signal.type === 'gann' ? 'bg-success' : 'bg-secondary'} me-1">${signal.label}</span>`
             ).join('')}
-                            ${uniqueSignals.length > 3 ? `<span class="badge bg-secondary">+${uniqueSignals.length - 3}</span>` : ''}
+                            ${uniqueSignals.length > 3 ? `<span class="badge bg-dark">+${uniqueSignals.length - 3}</span>` : ''}
                         </div>
-                        
-                        <!-- Expandable additional alignments -->
-                        ${hasMultiple ? `
-                            <div class="additional-alignments">
-                                <button class="btn btn-sm btn-outline-secondary btn-toggle" 
-                                        onclick="this.nextElementSibling.classList.toggle('d-none'); this.querySelector('i').classList.toggle('fa-rotate-90')">
-                                    <i class="fas fa-chevron-right fa-xs"></i>
-                                    ${group.alignments.length - 1} additional alignment${group.alignments.length > 2 ? 's' : ''}
-                                </button>
-                                <div class="d-none mt-2">
-                                    ${group.alignments.slice(1).map((alignment, idx) => {
+                    </div>
+                    
+                    <div class="description mb-2">
+                        <div class="mb-1">
+                            ${fibSignals.length > 0 ? `<span class="text-primary">${fibSignals.length} Fibonacci</span>` : ''}
+                            ${gannSignals.length > 0 ? `<span class="text-success">${gannSignals.length} Gann</span>` : ''}
+                            ${otherSignals.length > 0 ? `<span class="text-warning">${otherSignals.length} Other</span>` : ''}
+                        </div>
+                        <div class="small text-muted">
+                            ${this.daysFromNow(group.date)}
+                        </div>
+                    </div>
+                    
+                    <!-- Expandable details for "other signals" -->
+                    ${otherSignals.length > 0 ? `
+                        <div class="additional-alignments mt-2">
+                            <button class="btn btn-sm btn-outline-secondary btn-toggle w-100" 
+                                    onclick="this.nextElementSibling.classList.toggle('d-none'); this.querySelector('i').classList.toggle('fa-rotate-90')">
+                                <i class="fas fa-chevron-right fa-xs"></i>
+                                Show ${otherSignals.length} other signal${otherSignals.length > 1 ? 's' : ''}
+                            </button>
+                            <div class="d-none mt-2">
+                                ${otherSignals.map(signal => `
+                                    <div class="additional-alignment small mb-1 p-2 bg-dark rounded">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        ${signal.rawFactor || signal.label}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    <!-- Expandable additional alignments if multiple -->
+                    ${hasMultiple ? `
+                        <div class="additional-alignments mt-2">
+                            <button class="btn btn-sm btn-outline-info btn-toggle w-100" 
+                                    onclick="this.nextElementSibling.classList.toggle('d-none'); this.querySelector('i').classList.toggle('fa-rotate-90')">
+                                <i class="fas fa-chevron-right fa-xs"></i>
+                                Show ${group.alignments.length - 1} additional alignment${group.alignments.length > 2 ? 's' : ''}
+                            </button>
+                            <div class="d-none mt-2">
+                                ${group.alignments.slice(1).map((alignment, idx) => {
                 const signals = this.parseConvergingSignals(alignment.contributingFactors || []);
                 return `
-                                            <div class="additional-alignment small mb-2">
-                                                <div class="d-flex justify-content-between">
+                                            <div class="additional-alignment small mb-2 p-2 bg-dark rounded">
+                                                <div class="d-flex justify-content-between align-items-center">
                                                     <div>
                                                         ${signals.map(s =>
-                    `<span class="badge ${s.type === 'fibonacci' ? 'bg-primary' : 'bg-success'} me-1">${s.label}</span>`
+                    `<span class="badge ${s.type === 'fibonacci' ? 'bg-primary' : s.type === 'gann' ? 'bg-success' : 'bg-secondary'} me-1">${s.label}</span>`
                 ).join('')}
                                                     </div>
                                                     <span class="badge ${alignment.intensity > 0.8 ? 'bg-danger' : alignment.intensity > 0.5 ? 'bg-warning' : 'bg-info'}">
                                                         ${(alignment.intensity * 100).toFixed(0)}%
                                                     </span>
                                                 </div>
-                                                ${alignment.description ? `<div class="text-muted mt-1">${alignment.description}</div>` : ''}
+                                                ${alignment.description ? `<div class="text-muted mt-1 small">${alignment.description}</div>` : ''}
                                             </div>
                                         `;
             }).join('')}
-                                </div>
                             </div>
-                        ` : ''}
-                    </div>
-                    
-                    <!-- Main alignment description -->
-                    <div class="description mb-2">
-                        ${this.createAlignmentDescription(uniqueSignals)}
-                    </div>
+                        </div>
+                    ` : ''}
                 </div>
             `;
-        }).join('');
-    }
 
-    parseConvergingSignals(factors) {
-        console.log('🔍 parseConvergingSignals called with factors:', factors);
-
-        const signals = [];
-
-        factors.forEach((factor, index) => {
-            console.log(`  Processing factor ${index}: "${factor}"`);
-
-            if (factor.startsWith('FIB_')) {
-                const fibStr = factor.replace('FIB_', '');
-                console.log(`    → Extracted: "${fibStr}"`);
-
-                let ratio, days;
-
-                if (fibStr.includes('.')) {
-                    // Ratio format
-                    ratio = parseFloat(fibStr);
-                    days = Math.round(ratio * 100);
-                    console.log(`    → Detected RATIO format: ${ratio} → ${days} days`);
-                } else {
-                    // Days format
-                    days = parseInt(fibStr);
-                    ratio = days / 100.0;
-                    console.log(`    → Detected DAYS format: ${days} days → ${ratio} ratio`);
-                }
-
-                console.log(`    → Calling getFibRatioLabel(${ratio}, ${days})`);
-                const label = this.getFibRatioLabel(ratio, days);
-                console.log(`    → Result: "${label}"`);
-
-                signals.push({
-                    type: 'fibonacci',
-                    label: label,
-                    number: days,
-                    ratio: ratio,
-                    days: days,
-                    rawFactor: factor  // For debugging
-                });
-            }
-            else if (factor.includes('_ANNIVERSARY')) {
-                const days = factor.replace('_ANNIVERSARY', '').replace('D', '');
-                console.log(`    → Gann date: ${days} days`);
-
-                signals.push({
-                    type: 'gann',
-                    label: `Gann ${days}D`,
-                    days: parseInt(days)
-                });
-            }
-            else {
-                console.log(`    → Other signal type`);
-
-                signals.push({
-                    type: 'other',
-                    label: factor
-                });
-            }
+            container.appendChild(col);
         });
-
-        console.log('🔍 Returning signals:', signals);
-        return signals;
     }
 
-    // Create alignment description
-    createAlignmentDescription(signals) {
-        if (signals.length === 0) return 'No specific signals';
-
-        const fibSignals = signals.filter(s => s.type === 'fibonacci');
-        const gannSignals = signals.filter(s => s.type === 'gann');
-        const otherSignals = signals.filter(s => s.type === 'other');
-
-        const parts = [];
-
-
-        if (fibSignals.length > 0) {
-            // ✅ Use the label which now shows "Fib 0.618" instead of "F162"
-            const fibLabels = fibSignals.map(s => s.label).join(', ');
-            parts.push(`${fibSignals.length} Fibonacci: ${fibLabels}`);
-        }
-
-        if (gannSignals.length > 0) {
-            const gannPeriods = gannSignals.map(s => s.label).join(', ');
-            parts.push(`${gannSignals.length} Gann: ${gannPeriods}`);
-        }
-
-        if (otherSignals.length > 0) {
-            parts.push(`${otherSignals.length} other signals`);
-        }
-
-        return parts.join(' • ');
-    }
-
-    // Render Fibonacci projections
-    renderFibonacciProjections(projections) {
-        const container = document.getElementById('fibonacciProjections');
-        if (!container) return;
-
-        if (!projections || projections.length === 0) {
-            container.innerHTML = '<div class="alert alert-info">No Fibonacci projections available</div>';
-            return;
-        }
-
-        const now = new Date();
-        const upcomingProjections = projections
-            .filter(proj => {
-                const projDate = new Date(proj.date);
-                return projDate > now;
-            })
-            .sort((a, b) => new Date(a.date) - new Date(b.date))
-            .slice(0, 8);
-
-        if (upcomingProjections.length === 0) {
-            container.innerHTML = `
-            <div class="alert alert-info">
-                <i class="fas fa-filter me-2"></i>
-                No upcoming Fibonacci projections
-            </div>
-        `;
-            return;
-        }
-
-        container.innerHTML = upcomingProjections.map(proj => {
-            // ✅ Calculate ratio from days if ratio not provided
-            const days = proj.fibonacciNumber;
-            const ratio = proj.fibonacciRatio || (days / 100.0);
-            const label = proj.fibLabel || this.getFibRatioLabel(ratio, days);
-
-            return `
-            <div class="date-card ${proj.type === 'RESISTANCE' ? 'high' : 'low'}">
-                <div class="date">
-                    ${this.formatDate(proj.date)} 
-                    <span class="badge bg-${proj.intensity > 0.8 ? 'danger' : proj.intensity > 0.5 ? 'warning' : 'primary'} float-end">
-                        ${label}  <!-- ✅ Show "Fib 0.618" instead of "F62" -->
-                    </span>
-                </div>
-                <div class="intensity mb-2">
-                    <span class="badge bg-${proj.intensity > 0.8 ? 'danger' : proj.intensity > 0.5 ? 'warning' : 'info'}">
-                        ${(proj.intensity * 100).toFixed(0)}%
-                    </span>
-                    <span class="badge ${proj.type === 'RESISTANCE' ? 'bg-danger' : 'bg-success'} ms-2">
-                        ${proj.type}
-                    </span>
-                </div>
-                <div class="description">
-                    ${proj.description || `${label} ${proj.type.toLowerCase()} projection`}
-                </div>
-            </div>
-        `;
-        }).join('');
-    }
-
+    // Create timeline chart with ALL Gann dates
     createTimelineChart(analysis) {
         try {
             const ctx = document.getElementById('timelineChart');
@@ -626,25 +485,24 @@ class TimeGeometryDashboard {
             if (existingChart) existingChart.destroy();
 
             // Cutoff date: December 1, 2025
-            const cutoffDate = new Date('2025-12-01T00:00:00Z'); // Use UTC
+            const cutoffDate = new Date('2025-12-01T00:00:00Z');
+            const endDate = new Date('2026-12-31T00:00:00Z');
 
             // Get solar data if available
             const solarHighApDays = this.solarData?.forecast || [];
 
-            // Process solar dates CORRECTLY - PUT AT TOP (y=99)
+            // Process solar dates
             const solarEvents = solarHighApDays
                 .filter(day => {
                     if (!day.date || day.ap < 12) return false;
-
-                    // Parse date correctly - ensure it's treated as UTC
                     const eventDate = new Date(day.date + 'T00:00:00Z');
-                    return eventDate >= cutoffDate;
+                    return eventDate >= cutoffDate && eventDate <= endDate;
                 })
                 .map(day => {
-                    const date = new Date(day.date + 'T12:00:00Z'); // Use noon for visibility
+                    const date = new Date(day.date + 'T12:00:00Z');
                     return {
                         x: date,
-                        y: 99,  // Top of chart
+                        y: 95,
                         ap: day.ap,
                         type: 'solar',
                         event: { date: day.date, ap: day.ap }
@@ -652,425 +510,499 @@ class TimeGeometryDashboard {
                 })
                 .sort((a, b) => a.x - b.x);
 
-            // Separate Gann dates from Fibonacci dates
             const allAlignmentDates = analysis.vortexWindows || [];
             const allFibonacciProjections = analysis.fibonacciTimeProjections || [];
 
-            // Process alignment dates - check if they contain Gann signals
-            const gannDates = [];
-            const fibAlignmentDates = [];
+            // Load Gann dates separately
+            this.loadGannDataForChart().then(gannDates => {
+                console.log('📊 Gann dates for chart:', gannDates.length);
 
-            allAlignmentDates.forEach(alignment => {
-                const signalDate = new Date(alignment.date);
-                if (signalDate < cutoffDate) return;
+                // Process alignment dates
+                const processedAlignments = allAlignmentDates
+                    .filter(alignment => {
+                        const signalDate = new Date(alignment.date);
+                        return signalDate >= cutoffDate && signalDate <= endDate;
+                    })
+                    .map(alignment => {
+                        const factors = alignment.contributingFactors || [];
+                        const hasGann = factors.some(f => f.includes('_ANNIVERSARY'));
+                        const hasFibonacci = factors.some(f => f.startsWith('FIB_'));
 
-                const factors = alignment.contributingFactors || [];
-                const hasGann = factors.some(f => f.includes('_ANNIVERSARY'));
-                const hasFibonacci = factors.some(f => f.startsWith('FIB_'));
+                        if (hasGann) {
+                            return {
+                                x: new Date(alignment.date),
+                                y: alignment.intensity * 100,
+                                type: 'gann_alignment',
+                                alignment: alignment
+                            };
+                        } else if (hasFibonacci) {
+                            const fibSignals = factors.filter(f => f.startsWith('FIB_'));
+                            const ratioLabels = fibSignals.map(f => {
+                                const fibNumber = parseInt(f.replace('FIB_', ''));
+                                const ratio = fibNumber / 100.0;
+                                return this.getFibRatioLabel(ratio, fibNumber);
+                            });
 
-                if (hasGann) {
-                    gannDates.push({
-                        x: signalDate,
-                        y: alignment.intensity * 100,
-                        type: 'gann',
-                        alignment: alignment
-                    });
-                } else if (hasFibonacci) {
-                    fibAlignmentDates.push({
-                        x: signalDate,
-                        y: alignment.intensity * 100,
-                        type: 'fib_alignment',
-                        alignment: alignment
-                    });
-                }
-            });
+                            return {
+                                x: new Date(alignment.date),
+                                y: alignment.intensity * 100,
+                                type: 'fib_alignment',
+                                alignment: alignment,
+                                ratioLabels: ratioLabels
+                            };
+                        }
+                        return null;
+                    })
+                    .filter(item => item !== null);
 
-            const standaloneFibonacci = allFibonacciProjections
-                .filter(p => {
-                    const signalDate = new Date(p.date);
-                    return signalDate >= cutoffDate;
-                })
-                .map(p => {
-                    // USE THE RATIO FROM BACKEND IF AVAILABLE
-                    const ratio = p.fibonacciRatio || (p.fibonacciNumber / 100.0);
-                    const days = p.fibonacciNumber;
-                    const label = p.fibLabel || this.getFibRatioLabel(ratio, days);
+                const standaloneFibonacci = allFibonacciProjections
+                    .filter(p => {
+                        const signalDate = new Date(p.date);
+                        return signalDate >= cutoffDate && signalDate <= endDate;
+                    })
+                    .map(p => {
+                        const ratio = p.fibonacciRatio || (p.fibonacciNumber / 100.0);
+                        const days = p.fibonacciNumber;
+                        const label = p.fibLabel || this.getFibRatioLabel(ratio, days);
 
-                    return {
-                        x: new Date(p.date),
-                        y: p.intensity * 100,
-                        type: 'fibonacci',
-                        projection: p,
-                        ratio: ratio,
-                        ratioLabel: label,
-                        days: days
-                    };
-                })
-                .sort((a, b) => a.x - b.x);
+                        return {
+                            x: new Date(p.date),
+                            y: p.intensity * 100,
+                            type: 'fibonacci',
+                            projection: p,
+                            ratio: ratio,
+                            ratioLabel: label,
+                            days: days
+                        };
+                    })
+                    .sort((a, b) => a.x - b.x);
 
-            // Process fib alignment dates for proper labels
-            const processedFibAlignments = fibAlignmentDates.map(signal => {
-                const factors = signal.alignment.contributingFactors || [];
-                const fibSignals = factors.filter(f => f.startsWith('FIB_'));
+                // Combine all signals including standalone Gann dates
+                const allSignals = [
+                    ...gannDates,
+                    ...processedAlignments,
+                    ...standaloneFibonacci,
+                    ...solarEvents
+                ].sort((a, b) => a.x - b.x);
 
-                // Convert FIB_13 to Fib 0.13 (assuming 100-day base)
-                const ratioLabels = fibSignals.map(f => {
-                    const fibNumber = parseInt(f.replace('FIB_', ''));
-                    const ratio = fibNumber / 100.0;
-                    return this.getFibRatioLabel(ratio, fibNumber);
+                console.log('📊 Total signals for chart:', {
+                    gann: gannDates.length,
+                    alignments: processedAlignments.length,
+                    fibonacci: standaloneFibonacci.length,
+                    solar: solarEvents.length,
+                    total: allSignals.length
                 });
 
-                return {
-                    x: signal.x,
-                    y: signal.y,
-                    type: 'fib_alignment',
-                    alignment: signal.alignment,
-                    ratioLabels: ratioLabels,
-                    fibSignals: fibSignals
-                };
-            });
-
-            // Combine all signals
-            const allSignals = [
-                ...gannDates,
-                ...processedFibAlignments,
-                ...standaloneFibonacci,
-                ...solarEvents.map(event => ({
-                    x: event.x,
-                    y: event.y,
-                    type: 'solar',
-                    event: event
-                }))
-            ].sort((a, b) => a.x - b.x);
-
-            if (allSignals.length === 0) {
-                ctx.parentElement.innerHTML = `
-                <div class="text-center py-4">
-                    <i class="fas fa-filter fa-2x text-muted mb-3"></i>
-                    <p class="text-muted">No signals for Dec 2025+</p>
-                    <small class="text-muted">Check back later or try a different symbol</small>
-                </div>
-            `;
-                return;
-            }
-
-            // Separate past and future signals
-            const now = new Date();
-            const futureSignals = allSignals.filter(s => s.x >= now);
-
-            // Group signals by type for separate datasets
-            const gannData = futureSignals.filter(s => s.type === 'gann');
-            const fibData = futureSignals.filter(s => s.type === 'fibonacci' || s.type === 'fib_alignment');
-            const solarData = solarEvents;  // Use solarEvents directly (already filtered by cutoff)
-
-            // Create timeline with THREE distinct colors
-            const chart = new Chart(ctx, {
-                type: 'scatter',
-                data: {
-                    datasets: [
-                        // 1. GANN DATES - GREEN
-                        {
-                            label: `📅 Gann Dates (${gannData.length})`,
-                            data: gannData.map(signal => ({
-                                x: signal.x,
-                                y: signal.y,
-                                signal: signal
-                            })),
-                            backgroundColor: 'rgba(16, 185, 129, 0.8)',
-                            borderColor: 'rgb(16, 185, 129)',
-                            borderWidth: 1,
-                            pointStyle: 'circle',
-                            pointRadius: 3,        // Small dots
-                            pointHoverRadius: 8
-                        },
-                        // 2. FIBONACCI DATES - PURPLE
-                        {
-                            label: `🔷 Fibonacci (${fibData.length})`,
-                            data: fibData.map(signal => ({
-                                x: signal.x,
-                                y: signal.y,
-                                signal: signal
-                            })),
-                            backgroundColor: 'rgba(79, 70, 229, 0.8)',
-                            borderColor: 'rgb(79, 70, 229)',
-                            borderWidth: 1,
-                            pointStyle: 'circle',
-                            pointRadius: 2.5,      // Small dots
-                            pointHoverRadius: 7
-                        },
-                        // 3. SOLAR EVENTS - YELLOW/ORANGE
-                        {
-                            label: `☀️ Solar AP ≥ 12 (${solarData.length})`,
-                            data: solarData.map(signal => ({
-                                x: signal.x,
-                                y: signal.y,
-                                signal: signal
-                            })),
-                            backgroundColor: 'rgba(245, 158, 11, 1)', // Full opacity
-                            borderColor: 'rgb(245, 158, 11)',
-                            borderWidth: 2,                           // Thicker border
-                            pointStyle: 'circle',
-                            pointRadius: 2.5,                           // Larger for visibility
-                            pointHoverRadius: 3.5
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'top',
-                            labels: {
-                                padding: 15,
-                                usePointStyle: true,
-                                pointStyle: 'circle',
-                                font: {
-                                    size: 12
-                                }
-                            }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                title: (context) => {
-                                    const point = context[0].raw;
-                                    const signal = point.signal;
-                                    const dateStr = signal.x.toLocaleDateString('en-US', {
-                                        year: 'numeric',
-                                        month: 'short',
-                                        day: 'numeric',
-                                        weekday: 'short'
-                                    });
-
-                                    switch(signal.type) {
-                                        case 'gann':
-                                            return `📅 Gann Date: ${dateStr}`;
-                                        case 'fibonacci':
-                                        case 'fib_alignment':
-                                            return signal.projection ?
-                                                `🔷 ${signal.ratioLabel || 'Fibonacci'}: ${dateStr}` :
-                                                `🔷 Fibonacci Alignment: ${dateStr}`;
-                                        case 'solar':
-                                            return `☀️ Solar AP ${signal.event.ap}: ${dateStr}`;
-                                        default:
-                                            return `Signal: ${dateStr}`;
-                                    }
-                                },
-                                label: (context) => {
-                                    const point = context.raw;
-                                    const signal = point.signal;
-
-                                    switch(signal.type) {
-                                        case 'gann':
-                                            const gannFactors = signal.alignment.contributingFactors || [];
-                                            const gannSignals = gannFactors.filter(f => f.includes('_ANNIVERSARY'));
-                                            return [
-                                                `Gann Anniversary${gannSignals.length > 1 ? 's' : ''}`,
-                                                `Signals: ${gannSignals.length}`,
-                                                gannSignals.map(f => f.replace('_ANNIVERSARY', 'D')).join(', ')
-                                            ];
-                                        case 'fibonacci':
-                                            if (signal.projection) {
-                                                // ✅ FIXED: Show Fib 0.618 instead of F13
-                                                return [
-                                                    `${signal.ratioLabel || 'Fibonacci'}`,
-                                                    `Type: ${signal.projection.type || 'N/A'}`,
-                                                    `${signal.days || signal.projection.fibonacciNumber} days`,
-                                                    `From: ${signal.projection.sourcePivot?.type || 'pivot'} at $${signal.projection.sourcePivot?.price?.toFixed(2) || 'N/A'}`
-                                                ];
-                                            } else {
-                                                const fibFactors = signal.alignment.contributingFactors || [];
-                                                const fibSignals = fibFactors.filter(f => f.startsWith('FIB_'));
-                                                // ✅ FIXED: Convert FIB_13 to Fib 0.13
-                                                const fibLabels = fibSignals.map(f => {
-                                                    const fibNumber = parseInt(f.replace('FIB_', ''));
-                                                    const ratio = fibNumber / 100.0;
-                                                    return this.getFibRatioLabel(ratio, fibNumber);
-                                                });
-                                                return [
-                                                    `Fibonacci Alignment`,
-                                                    `Signals: ${fibSignals.length}`,
-                                                    fibLabels.join(', ')
-                                                ];
-                                            }
-                                        case 'fib_alignment':
-                                            if (signal.ratioLabels) {
-                                                return [
-                                                    `Fibonacci Alignment`,
-                                                    `Signals: ${signal.ratioLabels.length}`,
-                                                    signal.ratioLabels.join(', ')
-                                                ];
-                                            } else {
-                                                const fibFactors = signal.alignment.contributingFactors || [];
-                                                const fibSignals = fibFactors.filter(f => f.startsWith('FIB_'));
-                                                const fibLabels = fibSignals.map(f => {
-                                                    const fibNumber = parseInt(f.replace('FIB_', ''));
-                                                    const ratio = fibNumber / 100.0;
-                                                    return this.getFibRatioLabel(ratio, fibNumber);
-                                                });
-                                                return [
-                                                    `Fibonacci Alignment`,
-                                                    `Signals: ${fibSignals.length}`,
-                                                    fibLabels.join(', ')
-                                                ];
-                                            }
-                                        case 'solar':
-                                            return [
-                                                `Solar Geomagnetic Activity`,
-                                                `AP Index: ${signal.event.ap}`,
-                                                `High AP Day (≥12)`
-                                            ];
-                                        default:
-                                            return [`Signal: ${signal.type}`];
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: {
-                                unit: 'month',
-                                displayFormats: {
-                                    month: 'MMM yyyy'
-                                },
-                                tooltipFormat: 'PPP'
-                            },
-                            title: {
-                                display: true,
-                                text: 'Dec 2025 - Aug 2026 Timeline',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
-                            },
-                            min: '2025-12-01',
-                            max: '2026-08-31',
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.05)',
-                                drawBorder: true
-                            },
-                            ticks: {
-                                maxRotation: 0,
-                                autoSkip: true,
-                                maxTicksLimit: 12,
-                                minRotation: 0,
-                                padding: 0
-                            },
-                            offset: false,
-                            bounds: 'ticks'
-                        },
-                        y: {
-                            beginAtZero: true,
-                            max: 100,
-                            title: {
-                                display: true,
-                                text: 'Signal Intensity %',
-                                font: {
-                                    size: 14,
-                                    weight: 'bold'
-                                }
-                            },
-                            ticks: {
-                                callback: value => value + '%',
-                                stepSize: 20
-                            },
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.05)'
-                            }
-                        }
-                    },
-                    elements: {
-                        point: {
-                            radius: 3,
-                            hoverRadius: 8,
-                            hitRadius: 10
-                        }
-                    }
+                if (allSignals.length === 0) {
+                    ctx.parentElement.innerHTML = `
+                        <div class="text-center py-4">
+                            <i class="fas fa-filter fa-2x text-muted mb-3"></i>
+                            <p class="text-muted">No signals for Dec 2025+</p>
+                        </div>
+                    `;
+                    return;
                 }
+
+                // Separate past and future signals
+                const now = new Date();
+                const futureSignals = allSignals.filter(s => s.x >= now);
+
+                // Group signals by type
+                const gannData = futureSignals.filter(s => s.type === 'gann' || s.type === 'gann_alignment');
+                const fibData = futureSignals.filter(s => s.type === 'fibonacci' || s.type === 'fib_alignment');
+                const solarData = solarEvents;
+
+                // Create the chart
+                this.createChart(ctx, gannData, fibData, solarData, futureSignals.length);
+            }).catch(error => {
+                console.error('Failed to load Gann data for chart:', error);
             });
-
-            this.charts.set('timeline', chart);
-
-            // Legend explaining colors
-            const noteDiv = document.createElement('div');
-            noteDiv.className = 'alert alert-info mt-3';
-            noteDiv.innerHTML = `
-            <div class="row">
-                <div class="col-md-4">
-                    <span class="badge" style="background-color: rgba(16, 185, 129, 0.8); color: white;">
-                        📅 Gann Dates
-                    </span>
-                    <small class="ms-2">Gann anniversary alignments</small>
-                </div>
-                <div class="col-md-4">
-                    <span class="badge" style="background-color: rgba(79, 70, 229, 0.8); color: white;">
-                        🔷 Fibonacci
-                    </span>
-                    <small class="ms-2">Fibonacci projections & alignments</small>
-                </div>
-                <div class="col-md-4">
-                    <span class="badge" style="background-color: rgba(245, 158, 11, 0.8); color: black;">
-                        ☀️ Solar AP ≥ 12
-                    </span>
-                    <small class="ms-2">High geomagnetic activity days</small>
-                </div>
-            </div>
-            <div class="mt-2 small">
-                <i class="fas fa-filter me-1"></i>
-                Showing ${futureSignals.length} future signals from Dec 2025 to Aug 2026
-            </div>
-        `;
-            ctx.parentElement.appendChild(noteDiv);
 
         } catch (error) {
             console.error('❌ Failed to create timeline chart:', error);
             const ctx = document.getElementById('timelineChart');
             if (ctx) {
                 ctx.parentElement.innerHTML = `
-                <div class="alert alert-warning">
-                    <i class="fas fa-exclamation-triangle"></i> Chart error: ${error.message}
-                </div>
-            `;
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> Chart error: ${error.message}
+                    </div>
+                `;
             }
         }
     }
 
-    getFibRatioLabel(ratio, days) {
-        console.log(`🔍 getFibRatioLabel called with: ratio=${ratio}, days=${days}`);
+    // Helper to load Gann data for chart
+    async loadGannDataForChart() {
+        try {
+            const response = await fetch(`/api/gann/dates/${this.currentSymbol}`);
+            if (!response.ok) return [];
 
-        // ===== ROUNDING CORRECTIONS =====
-        // Apply corrections for known rounding issues
-        const roundingCorrections = {
-            79: 0.786,   // 0.786 * 100 = 78.6 → rounded to 79
-            62: 0.618,   // 0.618 * 100 = 61.8 → rounded to 62
-            38: 0.382,   // 0.382 * 100 = 38.2 → rounded to 38
-            50: 0.500,   // 0.500 * 100 = 50.0 → exact
-            127: 1.272,  // 1.272 * 100 = 127.2 → rounded to 127
-            162: 1.618,  // 1.618 * 100 = 161.8 → rounded to 162
-            262: 2.618   // 2.618 * 100 = 261.8 → rounded to 262
-        };
+            const gannDates = await response.json();
 
-        // Apply correction if days match a known rounding case
-        if (roundingCorrections[days]) {
-            const correctRatio = roundingCorrections[days];
-            const ratioDiff = Math.abs(ratio - correctRatio);
+            return gannDates
+                .filter(gann => {
+                    const gannDate = new Date(gann.date);
+                    const cutoffDate = new Date('2025-12-01T00:00:00Z');
+                    const endDate = new Date('2026-12-31T00:00:00Z');
+                    return gannDate >= cutoffDate && gannDate <= endDate;
+                })
+                .map(gann => ({
+                    x: new Date(gann.date),
+                    y: 85, // Fixed intensity for standalone Gann dates
+                    type: 'gann',
+                    gann: gann,
+                    period: gann.type ? gann.type.replace('D_ANNIVERSARY', 'D') : 'Gann'
+                }));
+        } catch (error) {
+            console.error('Failed to load Gann data for chart:', error);
+            return [];
+        }
+    }
 
-            // Only apply if significantly wrong (more than 0.2% difference)
-            if (ratioDiff > 0.002) {
-                console.log(`🔄 Correcting: ${ratio.toFixed(3)} (${days}d) → ${correctRatio}`);
-                ratio = correctRatio;
+    // Helper to create the chart
+    createChart(ctx, gannData, fibData, solarData, totalSignals) {
+        new Chart(ctx, {
+            type: 'scatter',
+            data: {
+                datasets: [
+                    {
+                        label: `📅 Gann Dates (${gannData.length})`,
+                        data: gannData.map(signal => ({
+                            x: signal.x,
+                            y: signal.y,
+                            signal: signal
+                        })),
+                        backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                        borderColor: 'rgb(16, 185, 129)',
+                        borderWidth: 1,
+                        pointStyle: 'circle',
+                        pointRadius: 4,
+                        pointHoverRadius: 9
+                    },
+                    {
+                        label: `🔷 Fibonacci (${fibData.length})`,
+                        data: fibData.map(signal => ({
+                            x: signal.x,
+                            y: signal.y,
+                            signal: signal
+                        })),
+                        backgroundColor: 'rgba(79, 70, 229, 0.8)',
+                        borderColor: 'rgb(79, 70, 229)',
+                        borderWidth: 1,
+                        pointStyle: 'circle',
+                        pointRadius: 3.5,
+                        pointHoverRadius: 8
+                    },
+                    {
+                        label: `☀️ Solar AP ≥ 12 (${solarData.length})`,
+                        data: solarData.map(signal => ({
+                            x: signal.x,
+                            y: signal.y,
+                            signal: signal
+                        })),
+                        backgroundColor: 'rgba(245, 158, 11, 1)',
+                        borderColor: 'rgb(245, 158, 11)',
+                        borderWidth: 2,
+                        pointStyle: 'circle',
+                        pointRadius: 3,
+                        pointHoverRadius: 7
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            padding: 15,
+                            usePointStyle: true,
+                            color: '#f1f5f9',
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleColor: '#f1f5f9',
+                        bodyColor: '#f1f5f9',
+                        borderColor: '#334155',
+                        borderWidth: 1,
+                        callbacks: {
+                            title: (context) => {
+                                const point = context[0].raw;
+                                const signal = point.signal;
+                                return signal.x.toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    weekday: 'short'
+                                });
+                            },
+                            label: (context) => {
+                                const point = context.raw;
+                                const signal = point.signal;
+                                return this.getTooltipLabel(signal);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'month',
+                            displayFormats: {
+                                month: 'MMM yyyy'
+                            },
+                            tooltipFormat: 'PPP'
+                        },
+                        title: {
+                            display: true,
+                            text: 'Dec 2025 - Dec 2026 Timeline',
+                            color: '#f1f5f9',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        },
+                        min: '2025-12-01',
+                        max: '2026-12-31',
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.05)'
+                        },
+                        ticks: {
+                            color: '#94a3b8',
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 12
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Signal Intensity %',
+                            color: '#f1f5f9',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.05)'
+                        },
+                        ticks: {
+                            color: '#94a3b8'
+                        }
+                    }
+                }
             }
+        });
+    }
+
+    // Helper for tooltip labels
+    getTooltipLabel(signal) {
+        switch(signal.type) {
+            case 'gann':
+            case 'gann_alignment':
+                if (signal.alignment) {
+                    const gannFactors = signal.alignment.contributingFactors || [];
+                    const gannSignals = gannFactors.filter(f => f.includes('_ANNIVERSARY'));
+                    return [
+                        `Gann Anniversary${gannSignals.length > 1 ? 's' : ''}`,
+                        `Signals: ${gannSignals.length}`,
+                        ...gannSignals.map(f => f.replace('_ANNIVERSARY', 'D'))
+                    ];
+                } else {
+                    return [
+                        `Gann ${signal.period || 'Anniversary'}`,
+                        `From: ${signal.gann?.sourcePivot?.type || 'pivot'}`,
+                        `Source: ${signal.gann?.sourcePivot?.date || 'N/A'}`
+                    ];
+                }
+            case 'fibonacci':
+                return [
+                    `${signal.ratioLabel || 'Fibonacci'}`,
+                    `Type: ${signal.projection.type || 'N/A'}`,
+                    `${signal.days || signal.projection.fibonacciNumber} days`,
+                    `Intensity: ${Math.round(signal.y)}%`
+                ];
+            case 'fib_alignment':
+                if (signal.ratioLabels) {
+                    return [
+                        `Fibonacci Alignment`,
+                        `Signals: ${signal.ratioLabels.length}`,
+                        ...signal.ratioLabels
+                    ];
+                }
+                return ['Fibonacci Alignment'];
+            case 'solar':
+                return [
+                    `Solar Geomagnetic Activity`,
+                    `AP Index: ${signal.event.ap}`,
+                    `High AP Day (≥12)`
+                ];
+            default:
+                return [`Signal: ${signal.type}`];
+        }
+    }
+
+    // Render solar dashboard
+    renderSolarDashboard() {
+        const container = document.getElementById('solarDashboard');
+        if (!container || !this.solarData) {
+            container.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Solar data not available
+                </div>
+            `;
+            return;
         }
 
-        // If ratio is still 0.790 after correction, log warning
-        if (Math.abs(ratio - 0.790) < 0.001) {
-            console.warn(`🚨 NON-FIBONACCI RATIO DETECTED: ${ratio} (${days} days)`);
-            console.trace();
-        }
+        const highApDays = this.solarData.forecast || [];
+        const currentAp = this.solarData.currentAp || 0;
+        const issueDate = this.solarData.issueDate || 'Unknown';
 
-        // ===== RATIO MAPPING =====
+        container.innerHTML = `
+            <div class="row mb-4">
+                <div class="col-md-4 mb-3">
+                    <div class="card ${currentAp >= 12 ? 'border-warning' : 'border-success'}">
+                        <div class="card-body text-center">
+                            <div class="display-4 fw-bold">${currentAp}</div>
+                            <div class="text-uppercase small">Current AP Index</div>
+                            <div class="mt-2">
+                                <span class="badge ${currentAp >= 12 ? 'bg-warning' : 'bg-success'}">
+                                    ${currentAp >= 12 ? 'Elevated' : 'Normal'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4 mb-3">
+                    <div class="card border-info">
+                        <div class="card-body text-center">
+                            <div class="display-4 fw-bold">${highApDays.length}</div>
+                            <div class="text-uppercase small">High AP Days (≥12)</div>
+                            <div class="mt-2">
+                                <span class="badge ${highApDays.length > 0 ? 'bg-warning' : 'bg-success'}">
+                                    ${highApDays.length > 0 ? 'Active Period' : 'Quiet'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4 mb-3">
+                    <div class="card bg-dark text-white">
+                        <div class="card-body text-center">
+                            <div class="h2 mb-2">
+                                <i class="fas fa-satellite"></i>
+                            </div>
+                            <div class="text-uppercase small">Forecast Source</div>
+                            <div class="mt-2 small">
+                                NOAA 45-day<br>${issueDate}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            ${highApDays.length > 0 ? `
+                <div class="alert ${highApDays.length > 5 ? 'alert-warning' : 'alert-info'}">
+                    <i class="fas ${highApDays.length > 5 ? 'fa-exclamation-triangle' : 'fa-info-circle'} me-2"></i>
+                    <strong>${highApDays.length} days with AP ≥ 12 detected</strong>
+                    <div class="mt-2 small">
+                        Next high AP day: ${this.formatDate(highApDays[0]?.date)} (${this.daysFromNow(highApDays[0]?.date)})
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <h5><i class="fas fa-list me-2"></i>High AP Dates (AP ≥ 12)</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>AP Index</th>
+                                    <th>Days From Now</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${highApDays.slice(0, 10).map(day => `
+                                    <tr>
+                                        <td>${this.formatDate(day.date)}</td>
+                                        <td><span class="badge ${day.ap >= 20 ? 'bg-danger' : 'bg-warning'}">${day.ap}</span></td>
+                                        <td>${this.daysFromNow(day.date)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    ${highApDays.length > 10 ? `<div class="text-center small text-muted mt-2">+ ${highApDays.length - 10} more days</div>` : ''}
+                </div>
+            ` : `
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong>Quiet geomagnetic period</strong>
+                    <div class="mt-1 small">No days with AP ≥ 12 in the forecast</div>
+                </div>
+            `}
+        `;
+    }
+
+    // Helper methods
+    parseConvergingSignals(factors) {
+        const signals = [];
+
+        factors.forEach((factor) => {
+            if (factor.startsWith('FIB_')) {
+                const fibStr = factor.replace('FIB_', '');
+                let ratio, days;
+
+                if (fibStr.includes('.')) {
+                    ratio = parseFloat(fibStr);
+                    days = Math.round(ratio * 100);
+                } else {
+                    days = parseInt(fibStr);
+                    ratio = days / 100.0;
+                }
+
+                signals.push({
+                    type: 'fibonacci',
+                    label: this.getFibRatioLabel(ratio, days),
+                    number: days,
+                    ratio: ratio,
+                    days: days,
+                    rawFactor: factor
+                });
+            }
+            else if (factor.includes('_ANNIVERSARY')) {
+                const days = factor.replace('_ANNIVERSARY', '').replace('D', '');
+                signals.push({
+                    type: 'gann',
+                    label: `Gann ${days}D`,
+                    days: parseInt(days)
+                });
+            }
+            else {
+                signals.push({
+                    type: 'other',
+                    label: factor.replace('SOLAR_AP_', 'Solar AP '),
+                    rawFactor: factor
+                });
+            }
+        });
+
+        return signals;
+    }
+
+    getFibRatioLabel(ratio, days) {
         const ratioMap = {
             0.382: 'Fib 0.382',
             0.500: 'Fib 0.500',
@@ -1084,35 +1016,17 @@ class TimeGeometryDashboard {
 
         const roundedRatio = Math.round(ratio * 1000) / 1000;
 
-        // Check exact matches
-        if (ratioMap[roundedRatio]) {
-            return ratioMap[roundedRatio];
-        }
-
-        // Check close matches
         for (const [key, label] of Object.entries(ratioMap)) {
             if (Math.abs(roundedRatio - parseFloat(key)) < 0.001) {
                 return label;
             }
         }
 
-        // Fallback
         return `Fib ${roundedRatio.toFixed(3)}`;
     }
 
-    // Refresh all data
-    refreshData() {
-        this.loadAllData(this.currentSymbol);
-
-        // Update timestamp
-        this.lastUpdated = new Date();
-        document.getElementById('lastUpdated').textContent = this.lastUpdated.toLocaleTimeString();
-    }
-
-    // Helper: Format date
     formatDate(dateString) {
         if (!dateString) return 'Unknown';
-
         const date = new Date(dateString);
         return date.toLocaleDateString('en-US', {
             year: 'numeric',
@@ -1121,16 +1035,62 @@ class TimeGeometryDashboard {
         });
     }
 
-    // Helper: Days from now
+    formatPrice(price) {
+        return price.toLocaleString(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        });
+    }
+
     daysFromNow(dateString) {
         if (!dateString) return '?';
-
         const date = new Date(dateString);
         const now = new Date();
         const diffTime = date - now;
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
         return diffDays > 0 ? `+${diffDays}d` : diffDays === 0 ? 'Today' : `${diffDays}d ago`;
+    }
+
+    isRecentDate(dateString, daysThreshold = 30) {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffTime = date - now;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays > 0 && diffDays <= daysThreshold;
+    }
+
+    updateTimestamp() {
+        document.getElementById('lastUpdated').textContent =
+            this.lastUpdated.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+    }
+
+    showError(error) {
+        const errorMessage = error.name === 'AbortError' ?
+            'Request timeout: API took too long to respond' :
+            error.message;
+
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'alert alert-danger mt-3';
+        errorDiv.innerHTML = `
+            <h6><i class="fas fa-exclamation-triangle"></i> Data Error</h6>
+            <p class="mb-1">${errorMessage}</p>
+            <small>Check API endpoints</small>
+        `;
+
+        const container = document.querySelector('.container-fluid');
+        if (container) {
+            container.prepend(errorDiv);
+        }
+    }
+
+    // Refresh all data
+    refreshData() {
+        this.loadAllData(this.currentSymbol);
+        this.updateTimestamp();
     }
 }
 
@@ -1138,18 +1098,12 @@ class TimeGeometryDashboard {
 window.addEventListener('load', function() {
     try {
         console.log('📱 Initializing Fibonacci Time Trader Dashboard...');
-
-        // Create dashboard instance
         window.dashboard = new TimeGeometryDashboard();
 
-        // Load initial data
         setTimeout(() => {
             try {
                 window.dashboard.loadAllData('BTC');
-
-                // Set initial timestamp
-                document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
-
+                window.dashboard.updateTimestamp();
             } catch (error) {
                 console.error('Failed to load initial data:', error);
             }

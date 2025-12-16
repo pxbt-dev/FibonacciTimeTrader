@@ -28,38 +28,158 @@ public class GannDateController {
     /**
      * Get pure Gann dates for a symbol
      */
+//    @GetMapping("/dates/{symbol}")
+//    public ResponseEntity<?> getGannDates(@PathVariable String symbol) {
+//        try {
+//            log.info("📅 Fetching MAJOR Gann dates for {}", symbol);
+//
+//            // Get monthly data for major cycle detection
+//            List<BinanceHistoricalService.OHLCData> monthlyData =
+//                    binanceHistoricalService.getMonthlyData(symbol);
+//
+//            if (monthlyData == null || monthlyData.isEmpty()) {
+//                return ResponseEntity.ok(Collections.emptyList());
+//            }
+//
+//            // 1. Get ONLY MAJOR cycle pivots (same as TimeGeometryService)
+//            List<PricePivot> majorPivots = new ArrayList<>();
+//
+//            // For BTC: Use the known major pivots
+//            if (symbol.equals("BTC")) {
+//                majorPivots.add(new PricePivot(LocalDate.of(2018, 12, 15), 3100.0, "MAJOR_LOW", 1.0));
+//                majorPivots.add(new PricePivot(LocalDate.of(2023, 1, 1), 15455.0, "MAJOR_LOW", 0.9));
+//                majorPivots.add(new PricePivot(LocalDate.of(2024, 3, 1), 72000.0, "MAJOR_HIGH", 0.8));
+//                majorPivots.add(new PricePivot(LocalDate.of(2025, 10, 1), 126272.76, "MAJOR_HIGH", 1.0));
+//
+//                log.info("💰 BTC: Using 4 major cycle pivots for Gann dates");
+//            } else {
+//                // For other symbols, find the most significant pivots
+//                if (monthlyData.size() >= 24) {
+//                    BinanceHistoricalService.OHLCData lowest = monthlyData.stream()
+//                            .min(Comparator.comparingDouble(BinanceHistoricalService.OHLCData::low))
+//                            .orElse(null);
+//                    BinanceHistoricalService.OHLCData highest = monthlyData.stream()
+//                            .max(Comparator.comparingDouble(BinanceHistoricalService.OHLCData::high))
+//                            .orElse(null);
+//
+//                    if (lowest != null) {
+//                        majorPivots.add(new PricePivot(
+//                                convertTimestampToDate(lowest.timestamp()),
+//                                lowest.low(),
+//                                "MAJOR_LOW",
+//                                1.0
+//                        ));
+//                    }
+//
+//                    if (highest != null) {
+//                        majorPivots.add(new PricePivot(
+//                                convertTimestampToDate(highest.timestamp()),
+//                                highest.high(),
+//                                "MAJOR_HIGH",
+//                                1.0
+//                        ));
+//                    }
+//                }
+//            }
+//
+//            // 2. Generate Gann dates ONLY from these major pivots
+//            List<GannDate> gannDates = new ArrayList<>();
+//            int[] gannPeriods = {90, 180, 360};
+//
+//            for (PricePivot pivot : majorPivots) {
+//                for (int period : gannPeriods) {
+//                    LocalDate gannDate = pivot.getDate().plusDays(period);
+//
+//                    // Only include future dates
+//                    if (gannDate.isAfter(LocalDate.now())) {
+//                        GannDate gann = new GannDate(
+//                                gannDate,
+//                                period + "D_ANNIVERSARY",
+//                                pivot
+//                        );
+//                        gannDates.add(gann);
+//                    }
+//                }
+//            }
+//
+//            // 3. Sort by date
+//            gannDates.sort(Comparator.comparing(GannDate::getDate));
+//
+//            // Limit to next 12 dates
+//            List<GannDate> limitedDates = gannDates.stream()
+//                    .limit(12)
+//                    .collect(Collectors.toList());
+//
+//            log.info("✅ Generated {} Gann dates from {} major pivots for {}",
+//                    limitedDates.size(), majorPivots.size(), symbol);
+//
+//            // 4. Log the dates for debugging
+//            log.info("📅 MAJOR Gann Dates for {}:", symbol);
+//            limitedDates.forEach(gann ->
+//                    log.info("   {}: {} from {} (${}) on {}",
+//                            gann.getDate(),
+//                            gann.getType(),
+//                            gann.getSourcePivot().getType(),
+//                            String.format("%,.0f", gann.getSourcePivot().getPrice()),
+//                            gann.getSourcePivot().getDate()));
+//
+//            return ResponseEntity.ok(limitedDates);
+//
+//        } catch (Exception e) {
+//            log.error("❌ Failed to get Gann dates for {}: {}", symbol, e.getMessage(), e);
+//            return ResponseEntity.status(500)
+//                    .body(Map.of("error", "Failed to get Gann dates", "message", e.getMessage()));
+//        }
+//    }
+
     @GetMapping("/dates/{symbol}")
     public ResponseEntity<?> getGannDates(@PathVariable String symbol) {
         try {
-            log.info("📅 Fetching Gann dates for {}", symbol);
+            log.info("📅 Fetching MAJOR Gann dates for {}", symbol);
 
-            // Get historical data
-            List<BinanceHistoricalService.OHLCData> historicalData =
-                    binanceHistoricalService.getHistoricalData(symbol);
+            // Get monthly data for major cycle detection
+            List<BinanceHistoricalService.OHLCData> monthlyData =
+                    binanceHistoricalService.getMonthlyData(symbol);
 
-            if (historicalData == null || historicalData.isEmpty()) {
+            if (monthlyData == null || monthlyData.isEmpty()) {
                 return ResponseEntity.ok(Collections.emptyList());
             }
 
-            // Find significant pivot points (reusing logic from BacktestService)
-            List<LocalDate> pivotDates = findSignificantPivots(historicalData);
+            // 1. Get ONLY MAJOR cycle pivots (reusing logic from TimeGeometryService)
+            List<PricePivot> majorPivots = getMajorCyclePivots(symbol, monthlyData);
 
-            // Convert to PricePivot objects
-            List<PricePivot> pricePivots = convertToPricePivots(historicalData, pivotDates);
+            if (majorPivots.isEmpty()) {
+                log.warn("⚠️ No major pivots found for {}", symbol);
+                return ResponseEntity.ok(Collections.emptyList());
+            }
 
-            // Generate Gann dates from pivots
-            List<GannDate> gannDates = generateGannDatesFromPivots(pricePivots);
+            log.info("🎯 Found {} major pivots for {} Gann dates", majorPivots.size(), symbol);
 
-            // Filter to future dates only
+            // 2. Generate Gann dates ONLY from these major pivots
+            List<GannDate> gannDates = generateGannDatesFromMajorPivots(majorPivots);
+
+            // 3. Filter to future dates and limit
             LocalDate today = LocalDate.now();
             List<GannDate> futureGannDates = gannDates.stream()
                     .filter(gann -> !gann.getDate().isBefore(today))
                     .sorted(Comparator.comparing(GannDate::getDate))
-                    .limit(20) // Limit to 20 future dates for UI
+                    .limit(15) // Show next 15 dates
                     .collect(Collectors.toList());
 
-            log.info("✅ Found {} Gann dates for {} ({} future)",
+            log.info("✅ Generated {} Gann dates for {} ({} future)",
                     gannDates.size(), symbol, futureGannDates.size());
+
+            // 4. Log the dates for debugging
+            if (!futureGannDates.isEmpty()) {
+                log.info("📅 MAJOR Gann Dates for {}:", symbol);
+                futureGannDates.forEach(gann ->
+                        log.info("   {}: {} from {} (${}) on {}",
+                                gann.getDate(),
+                                gann.getType(),
+                                gann.getSourcePivot().getType(),
+                                String.format("%,.0f", gann.getSourcePivot().getPrice()),
+                                gann.getSourcePivot().getDate()));
+            }
 
             return ResponseEntity.ok(futureGannDates);
 
@@ -68,6 +188,114 @@ public class GannDateController {
             return ResponseEntity.status(500)
                     .body(Map.of("error", "Failed to get Gann dates", "message", e.getMessage()));
         }
+    }
+
+    /**
+     * Get major cycle pivots (copy from TimeGeometryService)
+     */
+    private List<PricePivot> getMajorCyclePivots(String symbol, List<BinanceHistoricalService.OHLCData> monthlyData) {
+        List<PricePivot> pivots = new ArrayList<>();
+
+        // For BTC: Use known major pivots
+        if (symbol.equals("BTC")) {
+            pivots.add(new PricePivot(LocalDate.of(2018, 12, 15), 3100.0, "MAJOR_LOW", 1.0));
+            pivots.add(new PricePivot(LocalDate.of(2023, 1, 1), 15455.0, "MAJOR_LOW", 0.9));
+            pivots.add(new PricePivot(LocalDate.of(2024, 3, 1), 72000.0, "MAJOR_HIGH", 0.8));
+            pivots.add(new PricePivot(LocalDate.of(2025, 10, 1), 126272.76, "MAJOR_HIGH", 1.0));
+
+            log.info("💰 BTC: Using 4 major cycle pivots for Gann dates");
+            return pivots;
+        }
+
+        // For other symbols: Find 2-4 most significant pivots
+        if (monthlyData.size() >= 24) { // Need 2+ years
+            // Find highest high and lowest low
+            BinanceHistoricalService.OHLCData lowest = monthlyData.stream()
+                    .min(Comparator.comparingDouble(BinanceHistoricalService.OHLCData::low))
+                    .orElse(null);
+            BinanceHistoricalService.OHLCData highest = monthlyData.stream()
+                    .max(Comparator.comparingDouble(BinanceHistoricalService.OHLCData::high))
+                    .orElse(null);
+
+            if (lowest != null) {
+                pivots.add(new PricePivot(
+                        convertTimestampToDate(lowest.timestamp()),
+                        lowest.low(),
+                        "MAJOR_LOW",
+                        1.0
+                ));
+            }
+
+            if (highest != null) {
+                pivots.add(new PricePivot(
+                        convertTimestampToDate(highest.timestamp()),
+                        highest.high(),
+                        "MAJOR_HIGH",
+                        1.0
+                ));
+            }
+
+            // Try to find one more significant pivot (second highest or second lowest)
+            if (monthlyData.size() >= 48) { // 4+ years of data
+                // Find second highest (excluding the highest we already have)
+                BinanceHistoricalService.OHLCData secondHighest = monthlyData.stream()
+                        .filter(data -> data != highest)
+                        .max(Comparator.comparingDouble(BinanceHistoricalService.OHLCData::high))
+                        .orElse(null);
+
+                if (secondHighest != null && secondHighest.high() > highest.high() * 0.7) {
+                    // Only add if it's significant (at least 70% of the highest)
+                    pivots.add(new PricePivot(
+                            convertTimestampToDate(secondHighest.timestamp()),
+                            secondHighest.high(),
+                            "MAJOR_HIGH",
+                            0.8
+                    ));
+                }
+            }
+        }
+
+        log.info("📊 {}: Found {} major pivots for Gann dates", symbol, pivots.size());
+        return pivots;
+    }
+
+    /**
+     * Generate Gann dates from major pivots
+     */
+    private List<GannDate> generateGannDatesFromMajorPivots(List<PricePivot> majorPivots) {
+        List<GannDate> gannDates = new ArrayList<>();
+        int[] gannPeriods = {90, 180, 360};
+
+        for (PricePivot pivot : majorPivots) {
+            for (int period : gannPeriods) {
+                LocalDate gannDate = pivot.getDate().plusDays(period);
+
+                // Only include dates from last 5 years (to avoid ancient pivots)
+                LocalDate fiveYearsAgo = LocalDate.now().minusYears(5);
+                if (pivot.getDate().isAfter(fiveYearsAgo)) {
+                    GannDate gann = new GannDate(
+                            gannDate,
+                            period + "D_ANNIVERSARY",
+                            pivot
+                    );
+                    gannDates.add(gann);
+                }
+            }
+        }
+
+        // Sort by date
+        gannDates.sort(Comparator.comparing(GannDate::getDate));
+
+        return gannDates;
+    }
+
+    /**
+     * Helper method to convert timestamp
+     */
+    private LocalDate convertTimestampToDate(long timestamp) {
+        return Instant.ofEpochMilli(timestamp)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate();
     }
 
     /**

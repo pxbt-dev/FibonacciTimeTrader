@@ -1,7 +1,6 @@
 package com.pxbt.dev.FibonacciTimeTrader.model;
 
 import lombok.Data;
-
 import java.time.LocalDate;
 
 @Data
@@ -14,6 +13,9 @@ public class FibonacciTimeProjection {
     private String type; // "SUPPORT", "RESISTANCE", "REVERSAL"
     private String description;
 
+    // ✅ CRITICAL: Make sure this field exists
+    private double priceTarget;
+
     // Optional: Add getter for label
     public String getFibLabel() {
         return String.format("Fib %.3f", fibonacciRatio);
@@ -22,5 +24,10 @@ public class FibonacciTimeProjection {
     // Helper to get days without rounding issues
     public double getExactDays() {
         return 100 * fibonacciRatio; // 0.786 → 78.6 days
+    }
+
+    // Helper to format price target
+    public String getFormattedPriceTarget() {
+        return priceTarget > 0 ? String.format("$%,.2f", priceTarget) : "N/A";
     }
 }

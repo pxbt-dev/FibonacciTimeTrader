@@ -30,9 +30,15 @@
                 <p class="text-muted mb-0">Advanced Time Geometry Analysis</p>
             </div>
             <div>
-                <button id="refreshBtn" class="btn btn-primary">
-                    <i class="fas fa-sync-alt"></i> Refresh Data
-                </button>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex flex-column align-items-end">
+                        <small class="text-muted">Last Updated</small>
+                        <span id="lastUpdated" class="fw-bold">Just now</span>
+                    </div>
+                    <button id="refreshBtn" class="btn btn-primary">
+                        <i class="fas fa-sync-alt"></i> Refresh Data
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -57,93 +63,117 @@
         <div class="d-flex align-items-center mt-3">
             <div class="me-3">
                 <strong>Current Symbol:</strong>
-                <span id="currentSymbol" class="signal-positive ms-2">BTC</span>
+                <span id="currentSymbol" class="signal-positive ms-2 fw-bold">BTC</span>
             </div>
             <div class="me-3">
-                <strong>Last Updated:</strong>
-                <span id="lastUpdated" class="ms-2">Just now</span>
+                <strong>Time Range:</strong>
+                <span class="ms-2">Dec 2025 - Dec 2026</span>
             </div>
         </div>
     </div>
 
     <!-- MAIN CONTENT -->
-        <!-- Time Geometry Analysis -->
-        <div class="glass-card mb-4">
-            <h2><i class="fas fa-chart-line me-2"></i>Time Geometry Analysis</h2>
-            <p class="text-muted">Fibonacci time projections and vortex window detection</p>
 
-            <!-- Timeline Chart -->
-            <div class="mb-4">
-                <h4><i class="fas fa-timeline me-2"></i>Signal Timeline</h4>
-                <div style="height: 500px; position: relative;">
-                    <canvas id="timelineChart"></canvas>
+    <!-- Signal Timeline Chart -->
+    <div class="glass-card mb-4">
+        <h2><i class="fas fa-chart-line me-2"></i>Signal Timeline</h2>
+        <p class="text-muted mb-3">Visualization of all detected time geometry signals</p>
+
+        <div style="height: 500px; position: relative;">
+            <canvas id="timelineChart"></canvas>
+        </div>
+        <div class="text-center mt-3">
+            <div class="d-flex justify-content-center gap-4 flex-wrap">
+                <span class="badge" style="background-color: rgba(16, 185, 129, 0.8); color: white;">
+                    📅 Gann Dates
+                </span>
+                <span class="badge" style="background-color: rgba(79, 70, 229, 0.8); color: white;">
+                    🔷 Fibonacci
+                </span>
+                <span class="badge" style="background-color: rgba(245, 158, 11, 0.8); color: black;">
+                    ☀️ Solar AP ≥ 12
+                </span>
+            </div>
+            <small class="text-muted mt-2 d-block">Hover over points for detailed signal information</small>
+        </div>
+    </div>
+
+    <!-- ALIGNMENT DATES - Full Width -->
+    <div class="glass-card mb-4">
+        <h2><i class="fas fa-calendar-check me-2"></i>Alignment Dates</h2>
+        <p class="text-muted mb-3">Dates with multiple signal convergences (Fibonacci + Gann + Solar)</p>
+        <div id="upcomingDates" class="row">
+            <div class="col-12 text-center py-4">
+                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
                 </div>
-                <div class="text-center mt-2">
-                    <small class="text-muted">Showing all detected signals. Hover for details.</small>
+                <span class="ms-2">Loading alignment dates...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- THREE COLUMN LAYOUT -->
+    <div class="row mb-4">
+        <!-- LEFT COLUMN: Fibonacci Resistance Levels -->
+        <div class="col-lg-4 col-md-6 mb-4 mb-lg-0">
+            <div class="glass-card h-100">
+                <h4><i class="fas fa-arrow-up text-success me-2"></i>Fibonacci Resistance Levels</h4>
+                <p class="text-muted small mb-3">Projections above cycle high</p>
+                <div id="resistanceLevels">
+                    <div class="spinner-border spinner-border-sm text-success" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <span class="ms-2">Loading resistance levels...</span>
                 </div>
             </div>
         </div>
 
-        <!-- Solar Activity -->
-        <div class="glass-card mb-4">
-            <h2><i class="fas fa-sun me-2"></i>Solar & Geomagnetic Activity</h2>
-            <p class="text-muted">NOAA 45-day AP forecast integration</p>
-            <div id="solarDashboard">
-                <div class="text-center py-4">
-                    <div class="spinner-border text-warning" role="status">
-                        <span class="visually-hidden">Loading solar data...</span>
+        <!-- MIDDLE COLUMN: Fibonacci Support Levels -->
+        <div class="col-lg-4 col-md-6 mb-4 mb-lg-0">
+            <div class="glass-card h-100">
+                <h4><i class="fas fa-shield-alt text-danger me-2"></i>Fibonacci Support Levels</h4>
+                <p class="text-muted small mb-3">Retracements from cycle high</p>
+                <div id="supportLevels">
+                    <div class="spinner-border spinner-border-sm text-danger" role="status">
+                        <span class="visually-hidden">Loading...</span>
                     </div>
-                    <p class="mt-2 text-muted">Loading solar activity forecast...</p>
+                    <span class="ms-2">Loading support levels...</span>
                 </div>
             </div>
         </div>
 
-        <!-- Upcoming Dates & Projections - THREE COLUMNS -->
-        <div class="row mb-4">
-            <!-- LEFT COLUMN: Fibonacci/Gann Alignment Dates -->
-            <div class="col-lg-4 col-md-6 mb-4 mb-lg-0">
-                <div class="glass-card">
-                    <h4><i class="fas fa-calendar-check me-2"></i>Alignment Dates</h4>
-                    <div id="upcomingDates">
-                        <div class="spinner-border spinner-border-sm text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <span class="ms-2">Loading alignment dates...</span>
+        <!-- RIGHT COLUMN: Gann Dates -->
+        <div class="col-lg-4 col-md-12">
+            <div class="glass-card h-100">
+                <h4><i class="fas fa-bullseye me-2"></i>Gann Dates</h4>
+                <p class="text-muted small mb-3">90, 180, 360 day anniversaries from major pivots</p>
+                <div id="gannDates">
+                    <div class="spinner-border spinner-border-sm text-success" role="status">
+                        <span class="visually-hidden">Loading...</span>
                     </div>
-                </div>
-            </div>
-
-            <!-- MIDDLE COLUMN: Gann Dates Only -->
-            <div class="col-lg-4 col-md-6 mb-4 mb-lg-0">
-                <div class="glass-card">
-                    <h4><i class="fas fa-bullseye me-2"></i>Gann Dates</h4>
-                    <div id="gannDates">
-                        <div class="spinner-border spinner-border-sm text-success" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <span class="ms-2">Loading Gann dates...</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- RIGHT COLUMN: Fibonacci Projections -->
-            <div class="col-lg-4 col-md-12">
-                <div class="glass-card">
-                    <h4><i class="fas fa-expand-arrows-alt me-2"></i>Fibonacci Projections</h4>
-                    <div id="fibonacciProjections">
-                        <div class="spinner-border spinner-border-sm text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <span class="ms-2">Loading Fibonacci projections...</span>
-                    </div>
+                    <span class="ms-2">Loading Gann dates...</span>
                 </div>
             </div>
         </div>
+    </div>
 
+    <!-- Solar Activity - Moved to Bottom -->
+    <div class="glass-card mb-4">
+        <h2><i class="fas fa-sun me-2"></i>Solar & Geomagnetic Activity</h2>
+        <p class="text-muted mb-3">NOAA 45-day AP forecast integration (AP ≥ 12 only)</p>
+        <div id="solarDashboard">
+            <div class="text-center py-4">
+                <div class="spinner-border text-warning" role="status">
+                    <span class="visually-hidden">Loading solar data...</span>
+                </div>
+                <p class="mt-2 text-muted">Loading solar activity forecast...</p>
+            </div>
+        </div>
+    </div>
 
     <!-- Footer -->
-    <div class="glass-card text-center mt-4">
-        <p class="mb-0">
+    <footer class="glass-card text-center mt-4">
+        <p class="mb-2">
             <i class="fas fa-code me-1"></i> Fibonacci Time Trader
             <span class="mx-2">|</span>
             <i class="fas fa-clock me-1"></i> Pure Time Geometry Analysis
@@ -153,7 +183,7 @@
         <p class="small text-muted mt-2">
             Data Sources: Binance API • NOAA Space Weather Prediction Center
         </p>
-    </div>
+    </footer>
 </div>
 
 <!-- JavaScript -->
@@ -166,18 +196,16 @@
     // Refresh button handler
     document.getElementById('refreshBtn').addEventListener('click', function() {
         if (window.dashboard) {
+            const originalHTML = this.innerHTML;
             this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
             this.disabled = true;
 
             window.dashboard.refreshData();
 
             setTimeout(() => {
-                this.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Data';
+                this.innerHTML = originalHTML;
                 this.disabled = false;
             }, 2000);
-
-            // Update last updated time
-            document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
         }
     });
 </script>

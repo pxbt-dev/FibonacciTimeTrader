@@ -9,7 +9,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -18,219 +17,264 @@ public class TimeGeometryService {
     @Autowired
     private BinanceHistoricalService binanceHistoricalService;
 
-    private static final double[] FIBONACCI_RATIOS = {
-            0.382, 0.500, 0.618, 0.786,  // Retracements
-            1.000, 1.272, 1.618, 2.618   // Extensions
-    };
+    @Autowired
+    private SolarForecastService solarForecastService;
 
     public VortexAnalysis analyzeSymbol(String symbol) {
-        log.info("⏰ Starting EXTENDED Time Geometry analysis for {}", symbol);
+        log.info("⏰ MAJOR CYCLE ANALYSIS FOR {}", symbol);
 
+        // Get historical data
         List<BinanceHistoricalService.OHLCData> historicalData = binanceHistoricalService.getHistoricalData(symbol);
-
         VortexAnalysis analysis = new VortexAnalysis();
         analysis.setSymbol(symbol);
 
         if (historicalData == null || historicalData.isEmpty()) {
-            log.warn("⚠️ No historical data available for {}", symbol);
+            log.warn("⚠️ No data for {}", symbol);
             return analysis;
         }
 
-        log.info("📊 Using {} extended data points for {} ({} years)",
-                historicalData.size(), symbol, historicalData.size() / 365);
+        // Get MONTHLY data for major cycles
+        List<BinanceHistoricalService.OHLCData> monthlyData = binanceHistoricalService.getMonthlyData(symbol);
 
-        // Use weekly data for major cycle detection
-        List<BinanceHistoricalService.OHLCData> weeklyData = binanceHistoricalService.getWeeklyData(symbol);
+        // STEP 1: Get or create MAJOR pivots
+        List<PricePivot> majorPivots = getMajorCyclePivots(symbol, monthlyData);
 
-        List<PricePivot> majorPivots = findMajorCyclePivots(weeklyData);
-        List<PricePivot> recentPivots = findRecentPivots(historicalData);
+        // Find cycle high and low
+        PricePivot cycleHigh = majorPivots.stream()
+                .filter(p -> p.getType().contains("HIGH"))
+                .max(Comparator.comparing(PricePivot::getDate))
+                .orElse(null);
 
-        List<PricePivot> allPivots = new ArrayList<>();
-        allPivots.addAll(majorPivots);
-        allPivots.addAll(recentPivots);
+        PricePivot cycleLow = majorPivots.stream()
+                .filter(p -> p.getType().contains("LOW"))
+                .max(Comparator.comparing(PricePivot::getDate))
+                .orElse(null);
 
-        log.info("🎯 Found {} major + {} recent pivots for {}",
-                majorPivots.size(), recentPivots.size(), symbol);
+        // STEP 2: Generate PURE TIME projections (when)
+        List<FibonacciTimeProjection> timeProjections = generateTimeProjections(cycleHigh);
+        analysis.setFibonacciTimeProjections(timeProjections);
 
-        // Use calculateExtendedProjections
-        analysis.setFibonacciTimeProjections(calculateExtendedProjections(allPivots));
-        analysis.setGannDates(calculateGannDates(allPivots));
-        analysis.setVortexWindows(identifyVortexWindows(analysis));
+        // STEP 3: Generate PRICE levels (where)
+        List<FibonacciPriceLevel> priceLevels = generatePriceLevels(cycleHigh, cycleLow);
+        analysis.setFibonacciPriceLevels(priceLevels);
+
+        // STEP 4: Get Gann dates
+        List<GannDate> gannDates = calculateMajorGannDates(majorPivots);
+        analysis.setGannDates(gannDates);
+
+        // STEP 5: Generate vortex windows (alignment dates)
+        List<VortexWindow> vortexWindows = identifyMajorVortexWindows(timeProjections, gannDates);
+        analysis.setVortexWindows(vortexWindows);
+
+        // STEP 6: Other metrics
         analysis.setCompressionScore(calculateCompressionScore(historicalData));
-        analysis.setConfidenceScore(calculateConfidenceScore(analysis));
+        analysis.setConfidenceScore(calculateMajorConfidenceScore(majorPivots));
 
-        log.info("✅ EXTENDED Time Geometry complete: {} projections, {} vortex windows",
-                analysis.getFibonacciTimeProjections().size(),
-                analysis.getVortexWindows().size());
+        // Log summary
+        log.info("✅ {}: {} time projections, {} price levels, {} Gann dates, {} vortex windows",
+                symbol, timeProjections.size(), priceLevels.size(),
+                gannDates.size(), vortexWindows.size());
 
         return analysis;
     }
 
     /**
-     * Find major cycle pivots from weekly data
-     * Uses larger window for detecting significant highs/lows
+     * Generate TIME projections only (when)
      */
-    private List<PricePivot> findMajorCyclePivots(List<BinanceHistoricalService.OHLCData> weeklyData) {
-        List<PricePivot> majorPivots = new ArrayList<>();
-
-        if (weeklyData == null || weeklyData.size() < 40) {
-            log.warn("Insufficient weekly data for major pivot detection: {} points",
-                    weeklyData != null ? weeklyData.size() : 0);
-            return majorPivots;
-        }
-
-        // Larger window for major cycles (approx 6 months in weekly data)
-        int majorWindow = 26;  // ~6 months
-
-        for (int i = majorWindow; i < weeklyData.size() - majorWindow; i++) {
-            BinanceHistoricalService.OHLCData current = weeklyData.get(i);
-            boolean isMajorHigh = true;
-            boolean isMajorLow = true;
-
-            // Check surrounding window for major high
-            for (int j = i - majorWindow; j <= i + majorWindow; j++) {
-                if (j == i) continue;
-
-                BinanceHistoricalService.OHLCData compare = weeklyData.get(j);
-
-                if (compare.high() >= current.high()) {
-                    isMajorHigh = false;
-                }
-                if (compare.low() <= current.low()) {
-                    isMajorLow = false;
-                }
-
-                // Early exit if both false
-                if (!isMajorHigh && !isMajorLow) break;
-            }
-
-            if (isMajorHigh) {
-                PricePivot pivot = new PricePivot(
-                        convertTimestampToDate(current.timestamp()),
-                        current.high(),
-                        "MAJOR_HIGH",
-                        0.95  // Very high strength for major weekly pivots
-                );
-                majorPivots.add(pivot);
-
-                log.debug("🎯 MAJOR WEEKLY HIGH: {} at ${}",
-                        pivot.getDate(), pivot.getPrice());
-            }
-
-            if (isMajorLow) {
-                PricePivot pivot = new PricePivot(
-                        convertTimestampToDate(current.timestamp()),
-                        current.low(),
-                        "MAJOR_LOW",
-                        0.95
-                );
-                majorPivots.add(pivot);
-
-                log.debug("🎯 MAJOR WEEKLY LOW: {} at ${}",
-                        pivot.getDate(), pivot.getPrice());
-            }
-        }
-
-        log.info("Found {} major cycle pivots from weekly data", majorPivots.size());
-        return majorPivots;
-    }
-
-    private List<FibonacciTimeProjection> calculateExtendedProjections(List<PricePivot> allPivots) {
+    private List<FibonacciTimeProjection> generateTimeProjections(PricePivot cycleHigh) {
         List<FibonacciTimeProjection> projections = new ArrayList<>();
 
-        if (allPivots.isEmpty()) return projections;
+        if (cycleHigh == null) {
+            log.warn("No cycle high for time projections");
+            return projections;
+        }
 
-        for (PricePivot pivot : allPivots) {
-            for (double ratio : FIBONACCI_RATIOS) {
-                // Calculate exact days (don't round for storage)
-                double exactDays = 100 * ratio; // 0.786 → 78.6
-                int displayDays = (int) Math.round(exactDays); // 78.6 → 79 (for display only)
+        log.info("🔮 Generating time projections from cycle high: {} at ${}",
+                cycleHigh.getDate(), cycleHigh.getPrice());
 
-                LocalDate projectionDate = pivot.getDate().plusDays(displayDays);
+        // Time ratios (days)
+        Map<Double, String> timeMap = Map.of(
+                0.236, "24 days",
+                0.382, "38 days",
+                0.500, "50 days",
+                0.618, "62 days",
+                0.786, "79 days",
+                1.000, "100 days",
+                1.272, "127 days",
+                1.618, "162 days",
+                2.618, "262 days"
+        );
 
-                if (!projectionDate.isBefore(LocalDate.now())) {
-                    FibonacciTimeProjection projection = new FibonacciTimeProjection();
-                    projection.setDate(projectionDate);
-                    projection.setFibonacciNumber(displayDays); // Rounded for display
-                    projection.setFibonacciRatio(ratio); // ✅ Store the ACTUAL ratio (0.786)
-                    projection.setSourcePivot(pivot);
-                    projection.setIntensity(calculateFibIntensity(ratio) * pivot.getStrength());
-                    projection.setType(determineProjectionType(pivot.getType(), ratio));
+        for (Map.Entry<Double, String> entry : timeMap.entrySet()) {
+            double ratio = entry.getKey();
+            String daysLabel = entry.getValue();
 
-                    String fibLabel = getRatioLabel(ratio);
-                    projection.setDescription(String.format("%s from %s pivot at $%.2f",
-                            fibLabel, pivot.getType().toLowerCase().replace("_", " "), pivot.getPrice()));
+            int days = (int) Math.round(100 * ratio);
+            LocalDate date = cycleHigh.getDate().plusDays(days);
 
-                    projections.add(projection);
-                }
+            if (date.isBefore(LocalDate.now())) continue;
+
+            FibonacciTimeProjection projection = new FibonacciTimeProjection();
+            projection.setDate(date);
+            projection.setFibonacciNumber(days);
+            projection.setFibonacciRatio(ratio);
+            projection.setSourcePivot(cycleHigh);
+            projection.setIntensity(calculateFibIntensity(ratio));
+            projection.setType("TIME_PROJECTION");
+            projection.setPriceTarget(0);
+
+            projection.setDescription(String.format("Fib %.3f Time Cycle: %s from %s high",
+                    ratio, daysLabel, cycleHigh.getDate()));
+
+            projections.add(projection);
+
+            log.info("🔮 Created projection: {} days ({}) → {}", days, ratio, date);
+        }
+
+        log.info("🔮 Generated {} time projections", projections.size());
+        return projections;
+    }
+
+    /**
+     * Generate all price levels (support and resistance)
+     */
+    private List<FibonacciPriceLevel> generatePriceLevels(PricePivot cycleHigh, PricePivot cycleLow) {
+        List<FibonacciPriceLevel> allLevels = new ArrayList<>();
+
+        if (cycleHigh == null || cycleLow == null) return allLevels;
+
+        double highPrice = cycleHigh.getPrice();
+        double lowPrice = cycleLow.getPrice();
+
+        // Add retracement levels
+        allLevels.addAll(generateRetracementLevels(highPrice, lowPrice));
+
+        // Add extension levels
+        allLevels.addAll(generateExtensionLevels(highPrice, lowPrice));
+
+        // Sort by price (highest to lowest for display)
+        allLevels.sort((a, b) -> Double.compare(b.getPrice(), a.getPrice()));
+
+        log.info("📊 Generated {} Fibonacci price levels ({} support, {} resistance)",
+                allLevels.size(),
+                allLevels.stream().filter(l -> l.getType().equals("SUPPORT")).count(),
+                allLevels.stream().filter(l -> l.getType().equals("RESISTANCE")).count());
+
+        return allLevels;
+    }
+
+    /**
+     * Generate Fibonacci retracement levels (support)
+     */
+    private List<FibonacciPriceLevel> generateRetracementLevels(double highPrice, double lowPrice) {
+        List<FibonacciPriceLevel> levels = new ArrayList<>();
+        double range = highPrice - lowPrice;
+
+        // Standard Fibonacci retracement levels
+        double[] retracements = {0.000, 0.236, 0.382, 0.500, 0.618, 0.786, 1.000};
+        String[] labels = {
+                "Cycle High (0%)",
+                "Fib 0.236 (23.6%)",
+                "Fib 0.382 (38.2%)",
+                "Fib 0.500 (50.0%)",
+                "Fib 0.618 (61.8%)",
+                "Fib 0.786 (78.6%)",
+                "Cycle Low (100%)"
+        };
+
+        for (int i = 0; i < retracements.length; i++) {
+            double ratio = retracements[i];
+            double price = highPrice - (range * ratio);
+            String distance = String.format("%.1f%% retracement", ratio * 100);
+
+            levels.add(new FibonacciPriceLevel(
+                    price, ratio, labels[i], "SUPPORT", distance
+            ));
+        }
+
+        return levels;
+    }
+
+    /**
+     * Generate Fibonacci extension levels (resistance)
+     */
+    private List<FibonacciPriceLevel> generateExtensionLevels(double highPrice, double lowPrice) {
+        List<FibonacciPriceLevel> levels = new ArrayList<>();
+        double range = highPrice - lowPrice;
+
+        // Fibonacci extension levels
+        double[] extensions = {1.272, 1.382, 1.500, 1.618, 2.000, 2.618, 3.000, 3.618, 4.236};
+        String[] labels = {
+                "Fib 1.272 (27.2% ext)",
+                "Fib 1.382 (38.2% ext)",
+                "Fib 1.500 (50.0% ext)",
+                "Fib 1.618 (61.8% ext)",
+                "Fib 2.000 (100% ext)",
+                "Fib 2.618 (161.8% ext)",
+                "Fib 3.000 (200% ext)",
+                "Fib 3.618 (261.8% ext)",
+                "Fib 4.236 (323.6% ext)"
+        };
+
+        for (int i = 0; i < extensions.length; i++) {
+            double ratio = extensions[i];
+            double price = highPrice + (range * (ratio - 1.0));
+            double extensionPercent = (ratio - 1.0) * 100;
+            String distance = String.format("%.1f%% extension", extensionPercent);
+
+            // Skip if price is unrealistic (more than 5x the high)
+            if (price <= highPrice * 5) {
+                levels.add(new FibonacciPriceLevel(
+                        price, ratio, labels[i], "RESISTANCE", distance
+                ));
             }
         }
 
-        return projections.stream()
-                .sorted(Comparator.comparing(FibonacciTimeProjection::getDate))
-                .collect(Collectors.toList());
+        return levels;
     }
 
-    private String getRatioLabel(double ratio) {
-        // Format to 3 decimal places for clean comparison
-        String formatted = String.format("%.3f", ratio);
-
-        return switch (formatted) {
-            case "0.382" -> "Fib 0.382";
-            case "0.500" -> "Fib 0.500";
-            case "0.618" -> "Fib 0.618";
-            case "0.786" -> "Fib 0.786";
-            case "1.000" -> "Fib 1.000";
-            case "1.272" -> "Fib 1.272";
-            case "1.618" -> "Fib 1.618";
-            case "2.618" -> "Fib 2.618";
-            default -> "Fib " + formatted;
-        };
-    }
-
-    private double calculateFibIntensity(double ratio) {
-        // Key ratios get higher intensity
-        if (ratio == 0.618 || ratio == 1.618) return 0.9;  // Golden ratios
-        if (ratio == 0.382 || ratio == 0.786) return 0.7;  // Important retracements
-        if (ratio == 0.500) return 0.8;  // Psychological level
-        if (ratio == 1.272 || ratio == 2.618) return 0.6;  // Extensions
-        return 0.5;
-    }
-
-    private List<PricePivot> findRecentPivots(List<BinanceHistoricalService.OHLCData> historicalData) {
+    /**
+     * Get MAJOR cycle pivots (focus on key levels only)
+     */
+    public List<PricePivot> getMajorCyclePivots(String symbol, List<BinanceHistoricalService.OHLCData> monthlyData) {
         List<PricePivot> pivots = new ArrayList<>();
 
-        if (historicalData.size() < 5) return pivots;
+        // For BTC: Use known major pivots
+        if (symbol.equals("BTC")) {
+            pivots.add(new PricePivot(LocalDate.of(2018, 12, 15), 3100.0, "MAJOR_LOW", 1.0));
+            pivots.add(new PricePivot(LocalDate.of(2023, 1, 1), 15455.0, "MAJOR_LOW", 0.9));
+            pivots.add(new PricePivot(LocalDate.of(2024, 3, 1), 72000.0, "MAJOR_HIGH", 0.8));
+            pivots.add(new PricePivot(LocalDate.of(2025, 10, 1), 126272.76, "MAJOR_HIGH", 1.0));
 
-        // Your existing pivot detection logic for recent swings
-        for (int i = 3; i < historicalData.size() - 3; i++) {
-            BinanceHistoricalService.OHLCData current = historicalData.get(i);
+            log.info("💰 BTC: Using 4 major cycle pivots");
+            return pivots;
+        }
 
-            // Check for high pivot
-            if (current.high() > historicalData.get(i-1).high() &&
-                    current.high() > historicalData.get(i-2).high() &&
-                    current.high() > historicalData.get(i+1).high() &&
-                    current.high() > historicalData.get(i+2).high()) {
+        // For other coins: Find 2-4 most significant pivots
+        if (monthlyData.size() >= 24) { // Need 2+ years
+            // Find highest high and lowest low
+            BinanceHistoricalService.OHLCData lowest = monthlyData.stream()
+                    .min(Comparator.comparingDouble(BinanceHistoricalService.OHLCData::low))
+                    .orElse(null);
+            BinanceHistoricalService.OHLCData highest = monthlyData.stream()
+                    .max(Comparator.comparingDouble(BinanceHistoricalService.OHLCData::high))
+                    .orElse(null);
 
+            if (lowest != null) {
                 pivots.add(new PricePivot(
-                        convertTimestampToDate(current.timestamp()),
-                        current.high(),
-                        "HIGH",
-                        0.7
+                        convertTimestampToDate(lowest.timestamp()),
+                        lowest.low(),
+                        "MAJOR_LOW",
+                        1.0
                 ));
             }
 
-            // Check for low pivot
-            if (current.low() < historicalData.get(i-1).low() &&
-                    current.low() < historicalData.get(i-2).low() &&
-                    current.low() < historicalData.get(i+1).low() &&
-                    current.low() < historicalData.get(i+2).low()) {
-
+            if (highest != null) {
                 pivots.add(new PricePivot(
-                        convertTimestampToDate(current.timestamp()),
-                        current.low(),
-                        "LOW",
-                        0.7
+                        convertTimestampToDate(highest.timestamp()),
+                        highest.high(),
+                        "MAJOR_HIGH",
+                        1.0
                 ));
             }
         }
@@ -238,23 +282,159 @@ public class TimeGeometryService {
         return pivots;
     }
 
-    private List<GannDate> calculateGannDates(List<PricePivot> pivots) {
+    /**
+     * Calculate ONLY MAJOR Gann dates (90, 180, 360 days from major pivots)
+     */
+    private List<GannDate> calculateMajorGannDates(List<PricePivot> majorPivots) {
         List<GannDate> gannDates = new ArrayList<>();
 
-        for (PricePivot pivot : pivots) {
-            // Gann anniversaries (90, 180, 360 days)
-            gannDates.add(new GannDate(pivot.getDate().plusDays(90), "90D_ANNIVERSARY", pivot));
-            gannDates.add(new GannDate(pivot.getDate().plusDays(180), "180D_ANNIVERSARY", pivot));
-            gannDates.add(new GannDate(pivot.getDate().plusDays(360), "360D_ANNIVERSARY", pivot));
+        for (PricePivot pivot : majorPivots) {
+            // Only create Gann dates from recent pivots (last 5 years)
+            if (pivot.getDate().isAfter(LocalDate.now().minusYears(5))) {
+                gannDates.add(new GannDate(pivot.getDate().plusDays(90), "90D_ANNIVERSARY", pivot));
+                gannDates.add(new GannDate(pivot.getDate().plusDays(180), "180D_ANNIVERSARY", pivot));
+                gannDates.add(new GannDate(pivot.getDate().plusDays(360), "360D_ANNIVERSARY", pivot));
+            }
         }
 
         return gannDates;
     }
 
-    private double calculateCompressionScore(List<BinanceHistoricalService.OHLCData> historicalData) {
-        if (historicalData.size() < 20) return 0.0;
+    /**
+     * Enhanced vortex windows with proper solar integration
+     */
+    private List<VortexWindow> identifyMajorVortexWindows(
+            List<FibonacciTimeProjection> timeProjections,
+            List<GannDate> gannDates) {
 
-        // Simple volatility calculation using OHLC data
+        log.info("🌀 Creating vortex windows...");
+
+        Map<LocalDate, List<String>> signals = new HashMap<>();
+
+        // 1. Add Fibonacci time projections
+        if (timeProjections != null) {
+            log.info("🌀 Processing {} time projections", timeProjections.size());
+            timeProjections.forEach(p -> {
+                if (!p.getDate().isBefore(LocalDate.now())) {
+                    String ratioLabel = String.format("%.3f", p.getFibonacciRatio());
+                    String signal = "FIB_" + ratioLabel;
+                    signals.computeIfAbsent(p.getDate(), k -> new ArrayList<>())
+                            .add(signal);
+                    log.debug("🌀 Added Fibonacci signal {} for {}", signal, p.getDate());
+                }
+            });
+        } else {
+            log.warn("🌀 No time projections provided!");
+        }
+
+        // 2. Add Gann dates
+        if (gannDates != null) {
+            log.info("🌀 Processing {} Gann dates", gannDates.size());
+            gannDates.forEach(g -> {
+                if (!g.getDate().isBefore(LocalDate.now())) {
+                    signals.computeIfAbsent(g.getDate(), k -> new ArrayList<>())
+                            .add(g.getType());
+                    log.debug("🌀 Added Gann signal {} for {}", g.getType(), g.getDate());
+                }
+            });
+        } else {
+            log.warn("🌀 No Gann dates provided!");
+        }
+
+        // 3. Add STRONG Solar dates (AP ≥ 20 only)
+        try {
+            List<ForecastDay> highApDays = solarForecastService.getHighApDates();
+            if (highApDays != null) {
+                log.info("🌀 Processing {} solar days", highApDays.size());
+                for (ForecastDay solarDay : highApDays) {
+                    if (solarDay.getAp() >= 20 && !solarDay.getDate().isBefore(LocalDate.now())) {
+                        String signal = "SOLAR_AP_" + solarDay.getAp();
+                        signals.computeIfAbsent(solarDay.getDate(), k -> new ArrayList<>())
+                                .add(signal);
+                        log.debug("🌀 Added Solar signal {} for {}", signal, solarDay.getDate());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Solar data unavailable: {}", e.getMessage());
+        }
+
+        // Debug: Show all signal dates
+        log.info("🌀 Total signal dates: {}", signals.size());
+        signals.forEach((date, sigList) -> {
+            log.debug("🌀 Date {}: {} signals - {}", date, sigList.size(), sigList);
+        });
+
+        // 4. Create vortex windows
+        List<VortexWindow> windows = new ArrayList<>();
+        for (Map.Entry<LocalDate, List<String>> entry : signals.entrySet()) {
+            List<String> allSignals = entry.getValue();
+
+            // Skip if only solar signals
+            long solarCount = allSignals.stream()
+                    .filter(s -> s.startsWith("SOLAR_AP_"))
+                    .count();
+            long fibGannCount = allSignals.size() - solarCount;
+
+            if (allSignals.size() >= 2 && fibGannCount >= 1) {
+                VortexWindow window = new VortexWindow();
+                window.setDate(entry.getKey());
+                window.setIntensity(calculateVortexIntensity(allSignals));
+                window.setType("VORTEX_WINDOW");
+                window.setContributingFactors(allSignals);
+                window.setDescription(buildVortexDescription(allSignals));
+
+                windows.add(window);
+
+                log.info("🌀 Created vortex window for {} with {} signals: {}",
+                        entry.getKey(), allSignals.size(), allSignals);
+            }
+        }
+
+        log.info("🌀 Generated {} vortex windows total", windows.size());
+        return windows;
+    }
+
+    /**
+     * Calculate vortex intensity based on signal composition
+     */
+    private double calculateVortexIntensity(List<String> signals) {
+        double base = signals.size() * 0.3;
+
+        // Boost for Fibonacci/Gann combinations
+        boolean hasFib = signals.stream().anyMatch(s -> s.startsWith("FIB_"));
+        boolean hasGann = signals.stream().anyMatch(s -> s.contains("ANNIVERSARY"));
+        boolean hasSolar = signals.stream().anyMatch(s -> s.startsWith("SOLAR_AP_"));
+
+        if (hasFib && hasGann) base += 0.2;
+        if (hasSolar && (hasFib || hasGann)) base += 0.1;
+
+        return Math.min(base, 0.95);
+    }
+
+    /**
+     * Build vortex description based on signal types
+     */
+    private String buildVortexDescription(List<String> signals) {
+        long fibCount = signals.stream().filter(s -> s.startsWith("FIB_")).count();
+        long gannCount = signals.stream().filter(s -> s.contains("_ANNIVERSARY")).count();
+        long solarCount = signals.stream().filter(s -> s.startsWith("SOLAR_AP_")).count();
+
+        List<String> parts = new ArrayList<>();
+
+        if (fibCount > 0) parts.add(fibCount + " Fibonacci");
+        if (gannCount > 0) parts.add(gannCount + " Gann");
+        if (solarCount > 0) parts.add(solarCount + " Solar");
+
+        return String.join(" • ", parts) + " confluence";
+    }
+
+    /**
+     * Calculate compression score from historical data volatility
+     */
+    private double calculateCompressionScore(List<BinanceHistoricalService.OHLCData> historicalData) {
+        if (historicalData.size() < 20) return 0.5;
+
         double totalVolatility = 0;
         int lookback = Math.min(20, historicalData.size());
 
@@ -265,61 +445,36 @@ public class TimeGeometryService {
         }
 
         double avgVolatility = totalVolatility / lookback;
-
-        // Lower volatility = higher compression
         return Math.min(1.0, 1.0 / (avgVolatility + 0.01));
     }
 
-    private List<VortexWindow> identifyVortexWindows(VortexAnalysis analysis) {
-        Map<LocalDate, List<String>> dateSignals = new HashMap<>();
-
-        // Aggregate Fibonacci projections - USE RATIOS!
-        analysis.getFibonacciTimeProjections().forEach(proj -> {
-            // Use the actual ratio stored in the projection
-            String ratioLabel = String.format("%.3f", proj.getFibonacciRatio()); // "0.786"
-            dateSignals.computeIfAbsent(proj.getDate(), k -> new ArrayList<>())
-                    .add("FIB_" + ratioLabel); // "FIB_0.786" instead of "FIB_79"
-        });
-
-        // Aggregate Gann dates
-        analysis.getGannDates().forEach(gann ->
-                dateSignals.computeIfAbsent(gann.getDate(), k -> new ArrayList<>())
-                        .add(gann.getType()));
-
-        // Create vortex windows where signals converge
-        List<VortexWindow> windows = new ArrayList<>();
-        for (Map.Entry<LocalDate, List<String>> entry : dateSignals.entrySet()) {
-            if (entry.getValue().size() >= 2) {
-                VortexWindow window = new VortexWindow();
-                window.setDate(entry.getKey());
-                window.setIntensity(entry.getValue().size() * 0.3);
-                window.setType("TIME_VORTEX");
-                window.setContributingFactors(entry.getValue());
-                window.setDescription("Multiple time signals converging");
-                windows.add(window);
-            }
-        }
-
-        return windows;
+    /**
+     * Simplified confidence score based on pivot quality
+     */
+    private double calculateMajorConfidenceScore(List<PricePivot> majorPivots) {
+        if (majorPivots.size() >= 4) return 0.9;
+        if (majorPivots.size() >= 2) return 0.7;
+        return 0.5;
     }
 
-    private double calculateConfidenceScore(VortexAnalysis analysis) {
-        if (analysis.getVortexWindows().isEmpty()) return 0.1;
-
-        double avgIntensity = analysis.getVortexWindows().stream()
-                .mapToDouble(VortexWindow::getIntensity)
-                .average()
-                .orElse(0.0);
-
-        return Math.min(0.9, avgIntensity + analysis.getCompressionScore() * 0.3);
+    /**
+     * Calculate Fibonacci intensity based on ratio importance
+     */
+    private double calculateFibIntensity(double ratio) {
+        if (ratio == 0.618 || ratio == 1.618) return 0.9;
+        if (ratio == 0.382 || ratio == 0.786) return 0.7;
+        if (ratio == 0.500) return 0.8;
+        if (ratio == 1.272 || ratio == 2.618) return 0.6;
+        return 0.5;
     }
 
-    // Helper methods
-    private String determineProjectionType(String pivotType, double fibNumber) {
-        return pivotType.equals("HIGH") || pivotType.equals("MAJOR_HIGH") ? "RESISTANCE" : "SUPPORT";
-    }
-
+    /**
+     * Helper to convert timestamp to LocalDate
+     */
     private LocalDate convertTimestampToDate(long timestamp) {
-        return Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalDate();
+        return Instant.ofEpochMilli(timestamp)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate();
     }
+
 }

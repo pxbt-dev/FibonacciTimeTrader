@@ -1,7 +1,11 @@
 package com.pxbt.dev.FibonacciTimeTrader.controller;
 
-import com.pxbt.dev.FibonacciTimeTrader.model.VortexAnalysis;
+import com.pxbt.dev.FibonacciTimeTrader.Gateway.NoaaGateway;
+import com.pxbt.dev.FibonacciTimeTrader.model.*;
+import com.pxbt.dev.FibonacciTimeTrader.service.BinanceHistoricalService;
+import com.pxbt.dev.FibonacciTimeTrader.service.NoaaParserService;
 import com.pxbt.dev.FibonacciTimeTrader.service.TimeGeometryService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -9,12 +13,14 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/timeGeometry")
 public class TimeGeometryController {
 
     @Autowired
     private TimeGeometryService timeGeometryService;
+
 
     @GetMapping("/analysis/{symbol}")
     public ResponseEntity<?> getAnalysis(@PathVariable String symbol) {
@@ -24,6 +30,7 @@ public class TimeGeometryController {
             Map<String, Object> response = new HashMap<>();
             response.put("vortexWindows", analysis.getVortexWindows());
             response.put("fibonacciTimeProjections", analysis.getFibonacciTimeProjections());
+            response.put("fibonacciPriceLevels", analysis.getFibonacciPriceLevels()); // ADD THIS
             response.put("confidenceScore", analysis.getConfidenceScore());
             response.put("compressionScore", analysis.getCompressionScore());
 

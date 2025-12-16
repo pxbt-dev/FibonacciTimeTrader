@@ -12,6 +12,7 @@ public class VortexAnalysis {
     private List<GannDate> gannDates;
     private List<CycleConvergence> cycleConvergences;
     private List<VortexWindow> vortexWindows;
+    private List<FibonacciPriceLevel> fibonacciPriceLevels;
     private double compressionScore;
     private double confidenceScore;
 

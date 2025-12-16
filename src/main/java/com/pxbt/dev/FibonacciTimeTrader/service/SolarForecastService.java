@@ -50,7 +50,7 @@ public class SolarForecastService {
 
             if ("ERROR".equals(forecastText) || forecastText == null || forecastText.trim().isEmpty()) {
                 log.error("NOAA fetch failed or returned empty");
-                return getFallbackForecast();
+                return null;
             }
 
             // Parse (AP ≥ 12 only)
@@ -84,7 +84,7 @@ public class SolarForecastService {
 
         } catch (Exception e) {
             log.error("Critical error: {}", e.getMessage(), e);
-            return getFallbackForecast();
+            return null;
         }
     }
 
@@ -95,30 +95,5 @@ public class SolarForecastService {
                 : new ArrayList<>();
     }
 
-    private SolarForecast getFallbackForecast() {
-        log.warn("Using fallback data");
-        SolarForecast forecast = new SolarForecast();
-        forecast.setTimestamp(System.currentTimeMillis());
-        forecast.setMessage("Fallback - NOAA unavailable");
-        forecast.setSource("Fallback");
 
-        // Simple fallback with correct AP values
-        List<ForecastDay> days = new ArrayList<>();
-        LocalDate today = LocalDate.now();
-
-        // Create realistic AP values from your actual data
-        int[] sampleAPs = {70, 33, 12, 12, 15, 20, 20, 25, 20, 20, 15, 30, 25, 18, 70, 33};
-
-        for (int i = 0; i < Math.min(45, sampleAPs.length); i++) {
-            ForecastDay day = new ForecastDay();
-            day.setDate(today.plusDays(i));
-            day.setAp(sampleAPs[i % sampleAPs.length]);
-            days.add(day);
-        }
-
-        forecast.setForecast(days);
-        forecast.setCurrentAp(days.get(0).getAp());
-
-        return forecast;
-    }
 }
