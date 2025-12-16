@@ -16,6 +16,8 @@ import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.pxbt.dev.FibonacciTimeTrader.service.TimeGeometryService.COMPREHENSIVE_GANN_PERIODS;
+
 @Slf4j
 @RestController
 @RequestMapping("/api/gann")
@@ -27,7 +29,7 @@ public class GannDateController {
     @Autowired
     private TimeGeometryService timeGeometryService;
 
-    private static final int[] GANN_PERIODS = {90, 180, 360};
+    private static final int[] GANN_PERIODS = {30, 45, 60, 90, 120, 135, 144, 180, 225, 270, 315, 360, 540, 720};
     private static final int PIVOT_LOOKBACK_DAYS = 10;
 
     /**
@@ -166,21 +168,24 @@ public class GannDateController {
      */
     private List<GannDate> generateGannDatesFromMajorPivots(List<PricePivot> majorPivots) {
         List<GannDate> gannDates = new ArrayList<>();
-        int[] gannPeriods = {90, 180, 360};
 
         for (PricePivot pivot : majorPivots) {
-            for (int period : gannPeriods) {
+            for (int period : GANN_PERIODS) {
                 LocalDate gannDate = pivot.getDate().plusDays(period);
 
                 // Only include dates from last 5 years (to avoid ancient pivots)
                 LocalDate fiveYearsAgo = LocalDate.now().minusYears(5);
                 if (pivot.getDate().isAfter(fiveYearsAgo)) {
-                    GannDate gann = new GannDate(
-                            gannDate,
-                            period + "D_ANNIVERSARY",
-                            pivot
-                    );
-                    gannDates.add(gann);
+                    // Limit future projections to reasonable timeframe
+                    LocalDate maxFutureDate = LocalDate.now().plusYears(3);
+                    if (gannDate.isBefore(maxFutureDate)) {
+                        GannDate gann = new GannDate(
+                                gannDate,
+                                period + "D_ANNIVERSARY",
+                                pivot
+                        );
+                        gannDates.add(gann);
+                    }
                 }
             }
         }
@@ -188,6 +193,7 @@ public class GannDateController {
         // Sort by date
         gannDates.sort(Comparator.comparing(GannDate::getDate));
 
+        log.info("Generated {} Gann dates from {} major pivots", gannDates.size(), majorPivots.size());
         return gannDates;
     }
 
@@ -445,4 +451,113 @@ public class GannDateController {
                     ));
         }
     }
+
+    @GetMapping("/dates/{symbol}/filtered")
+    public ResponseEntity<?> getFilteredGannDates(
+            @PathVariable String symbol,
+            @RequestParam(required = false, defaultValue = "STANDARD") String level,
+            @RequestParam(required = false, defaultValue = "50") int limit) {
+
+        try {
+            log.info("📅 Fetching filtered Gann dates for {} at {} level (limit: {})", symbol, level, limit);
+
+            // Define comprehensive Gann periods
+            int[] comprehensivePeriods = {
+                    30, 45, 60, 72, 90, 120, 135, 144, 150, 180, 216, 225,
+                    240, 270, 288, 300, 315, 330, 360, 49, 98, 147, 196,
+                    540, 720, 900, 1080, 1260, 1440
+            };
+
+            // Define periods based on level
+            int[] periods;
+            switch(level.toUpperCase()) {
+                case "BASIC":
+                    periods = new int[]{90, 180, 360};
+                    log.info("Using BASIC Gann periods: 90, 180, 360 days");
+                    break;
+                case "ADVANCED":
+                    periods = new int[]{30, 45, 60, 90, 120, 135, 144, 180, 225, 270, 315, 360, 540, 720, 1080, 1440};
+                    log.info("Using ADVANCED Gann periods (16 periods)");
+                    break;
+                case "COMPREHENSIVE":
+                    periods = comprehensivePeriods;
+                    log.info("Using COMPREHENSIVE Gann periods ({} periods)", periods.length);
+                    break;
+                default: // STANDARD
+                    periods = new int[]{30, 45, 60, 90, 120, 135, 144, 180, 225, 270, 315, 360, 540, 720};
+                    log.info("Using STANDARD Gann periods (14 periods)");
+            }
+
+            // Get monthly data for major cycle detection
+            List<BinanceHistoricalService.OHLCData> monthlyData =
+                    binanceHistoricalService.getMonthlyData(symbol);
+
+            if (monthlyData == null || monthlyData.isEmpty()) {
+                return ResponseEntity.ok(Collections.emptyList());
+            }
+
+            // Get ONLY MAJOR cycle pivots
+            List<PricePivot> majorPivots = getMajorCyclePivots(symbol, monthlyData);
+
+            if (majorPivots.isEmpty()) {
+                log.warn("⚠️ No major pivots found for {}", symbol);
+                return ResponseEntity.ok(Collections.emptyList());
+            }
+
+            // Generate Gann dates ONLY from these major pivots
+            List<GannDate> allGannDates = new ArrayList<>();
+
+            for (PricePivot pivot : majorPivots) {
+                for (int period : periods) {
+                    LocalDate gannDate = pivot.getDate().plusDays(period);
+
+                    // Only include dates from recent pivots (last 5 years)
+                    LocalDate fiveYearsAgo = LocalDate.now().minusYears(5);
+                    if (pivot.getDate().isAfter(fiveYearsAgo)) {
+                        // Limit to reasonable future (next 3 years max)
+                        LocalDate maxFutureDate = LocalDate.now().plusYears(3);
+                        if (!gannDate.isAfter(maxFutureDate)) {
+                            GannDate gann = new GannDate(
+                                    gannDate,
+                                    period + "D_ANNIVERSARY",
+                                    pivot
+                            );
+                            allGannDates.add(gann);
+                        }
+                    }
+                }
+            }
+
+            // Filter to future dates and sort
+            LocalDate today = LocalDate.now();
+            List<GannDate> futureGannDates = allGannDates.stream()
+                    .filter(gann -> !gann.getDate().isBefore(today))
+                    .sorted(Comparator.comparing(GannDate::getDate))
+                    .limit(limit) // Use parameterized limit
+                    .collect(Collectors.toList());
+
+            log.info("✅ Generated {} Gann dates for {} ({} future, level: {})",
+                    allGannDates.size(), symbol, futureGannDates.size(), level);
+
+            // Log summary
+            if (!futureGannDates.isEmpty()) {
+                log.info("📅 Next 5 Gann Dates for {} ({} level):", symbol, level);
+                futureGannDates.stream()
+                        .limit(5)
+                        .forEach(gann -> log.info("   {}: {} from {} (${})",
+                                gann.getDate(),
+                                gann.getType(),
+                                gann.getSourcePivot().getDate(),
+                                String.format("%,.0f", gann.getSourcePivot().getPrice())));
+            }
+
+            return ResponseEntity.ok(futureGannDates);
+
+        } catch (Exception e) {
+            log.error("❌ Failed to get filtered Gann dates for {}: {}", symbol, e.getMessage(), e);
+            return ResponseEntity.status(500)
+                    .body(Map.of("error", "Failed to get filtered Gann dates", "message", e.getMessage()));
+        }
+    }
+
 }

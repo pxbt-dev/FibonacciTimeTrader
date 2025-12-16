@@ -32,7 +32,7 @@
             <div>
                 <div class="d-flex align-items-center gap-3">
                     <div class="d-flex flex-column align-items-end">
-                        <small class="text-muted">Last Updated</small>
+                        <small class="text-white">Last Updated</small>
                         <span id="lastUpdated" class="fw-bold">Just now</span>
                     </div>
                     <button id="refreshBtn" class="btn btn-primary">
@@ -77,7 +77,7 @@
     <!-- Signal Timeline Chart -->
     <div class="glass-card mb-4">
         <h2><i class="fas fa-chart-line me-2"></i>Signal Timeline</h2>
-        <p class="text-muted mb-3">Visualization of all detected time geometry signals</p>
+        <p class="text-white mb-3">Visualization of all detected time geometry signals</p>
 
         <div style="height: 500px; position: relative;">
             <canvas id="timelineChart"></canvas>
@@ -94,14 +94,14 @@
                     ☀️ Solar AP ≥ 12
                 </span>
             </div>
-            <small class="text-muted mt-2 d-block">Hover over points for detailed signal information</small>
+            <small class="text-white mt-2 d-block">Hover over points for detailed signal information</small>
         </div>
     </div>
 
     <!-- ALIGNMENT DATES - Full Width -->
     <div class="glass-card mb-4">
         <h2><i class="fas fa-calendar-check me-2"></i>Alignment Dates</h2>
-        <p class="text-muted mb-3">Dates with multiple signal convergences (Fibonacci + Gann + Solar)</p>
+        <p class="text-white mb-3">Dates with multiple signal convergences (Fibonacci + Gann + Solar)</p>
         <div id="upcomingDates" class="row">
             <div class="col-12 text-center py-4">
                 <div class="spinner-border spinner-border-sm text-primary" role="status">
@@ -118,7 +118,7 @@
         <div class="col-lg-4 col-md-6 mb-4 mb-lg-0">
             <div class="glass-card h-100">
                 <h4><i class="fas fa-arrow-up text-success me-2"></i>Fibonacci Resistance Levels</h4>
-                <p class="text-muted small mb-3">Projections above cycle high</p>
+                <p class="text-white small mb-3">Projections above cycle high</p>
                 <div id="resistanceLevels">
                     <div class="spinner-border spinner-border-sm text-success" role="status">
                         <span class="visually-hidden">Loading...</span>
@@ -132,7 +132,7 @@
         <div class="col-lg-4 col-md-6 mb-4 mb-lg-0">
             <div class="glass-card h-100">
                 <h4><i class="fas fa-shield-alt text-danger me-2"></i>Fibonacci Support Levels</h4>
-                <p class="text-muted small mb-3">Retracements from cycle high</p>
+                <p class="text-white small mb-3">Retracements from cycle high</p>
                 <div id="supportLevels">
                     <div class="spinner-border spinner-border-sm text-danger" role="status">
                         <span class="visually-hidden">Loading...</span>
@@ -146,7 +146,7 @@
         <div class="col-lg-4 col-md-12">
             <div class="glass-card h-100">
                 <h4><i class="fas fa-bullseye me-2"></i>Gann Dates</h4>
-                <p class="text-muted small mb-3">90, 180, 360 day anniversaries from major pivots</p>
+                <p class="text-white small mb-3">Gann time cycles (30-720 days) from major pivots</p>
                 <div id="gannDates">
                     <div class="spinner-border spinner-border-sm text-success" role="status">
                         <span class="visually-hidden">Loading...</span>
@@ -160,13 +160,13 @@
     <!-- Solar Activity - Moved to Bottom -->
     <div class="glass-card mb-4">
         <h2><i class="fas fa-sun me-2"></i>Solar & Geomagnetic Activity</h2>
-        <p class="text-muted mb-3">NOAA 45-day AP forecast integration (AP ≥ 12 only)</p>
+        <p class="text-white mb-3">NOAA 45-day AP forecast integration (AP ≥ 12 only)</p>
         <div id="solarDashboard">
             <div class="text-center py-4">
                 <div class="spinner-border text-warning" role="status">
                     <span class="visually-hidden">Loading solar data...</span>
                 </div>
-                <p class="mt-2 text-muted">Loading solar activity forecast...</p>
+                <p class="mt-2 text-white">Loading solar activity forecast...</p>
             </div>
         </div>
     </div>
@@ -180,7 +180,7 @@
             <span class="mx-2">|</span>
             <i class="far fa-copyright me-1"></i> 2025
         </p>
-        <p class="small text-muted mt-2">
+        <p class="small text-white mt-2">
             Data Sources: Binance API • NOAA Space Weather Prediction Center
         </p>
     </footer>

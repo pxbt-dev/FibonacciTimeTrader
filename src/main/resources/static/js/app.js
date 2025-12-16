@@ -188,7 +188,7 @@ class TimeGeometryDashboard {
                             </span>
                         </div>
                         
-                        <div class="description small text-muted">
+                        <div class="description small text-white">
                             <div class="mb-1">
                                 <i class="fas fa-arrow-right me-1"></i>
                                 From ${this.formatDate(sourcePivot.date)}
@@ -200,7 +200,7 @@ class TimeGeometryDashboard {
                             </div>
                         </div>
                     ` : `
-                        <div class="description text-muted">
+                        <div class="description text-white">
                             Gann ${period.toLowerCase()} anniversary
                             <div class="mt-1">
                                 <span class="badge bg-dark">
@@ -492,7 +492,7 @@ class TimeGeometryDashboard {
                                         ${(alignment.intensity * 100).toFixed(0)}%
                                     </span>
                                 </div>
-                                ${alignment.description ? `<div class="text-muted mt-1 small">${alignment.description}</div>` : ''}
+                                ${alignment.description ? `<div class="text-white mt-1 small">${alignment.description}</div>` : ''}
                             </div>
                         `;
             }).join('')}
@@ -631,8 +631,8 @@ class TimeGeometryDashboard {
                 if (allSignals.length === 0) {
                     ctx.parentElement.innerHTML = `
                         <div class="text-center py-4">
-                            <i class="fas fa-filter fa-2x text-muted mb-3"></i>
-                            <p class="text-muted">No signals for Dec 2025+</p>
+                            <i class="fas fa-filter fa-2x text-white mb-3"></i>
+                            <p class="text-white">No signals for Dec 2025+</p>
                         </div>
                     `;
                     return;
@@ -909,7 +909,7 @@ class TimeGeometryDashboard {
                 <div class="card bg-dark border-${currentAp >= 12 ? 'warning' : 'success'}">
                     <div class="card-body text-center">
                         <div class="display-4 fw-bold text-${currentAp >= 12 ? 'warning' : 'success'}">${currentAp}</div>
-                        <div class="text-uppercase small text-muted">Current AP Index</div>
+                        <div class="text-uppercase small text-white">Current AP Index</div>
                         <div class="mt-2">
                             <span class="badge ${currentAp >= 12 ? 'bg-warning' : 'bg-success'}">
                                 ${currentAp >= 12 ? 'Elevated' : 'Normal'}
@@ -923,7 +923,7 @@ class TimeGeometryDashboard {
                 <div class="card bg-dark border-info">
                     <div class="card-body text-center">
                         <div class="display-4 fw-bold text-info">${highApDays.length}</div>
-                        <div class="text-uppercase small text-muted">High AP Days (≥12)</div>
+                        <div class="text-uppercase small text-white">High AP Days (≥12)</div>
                         <div class="mt-2">
                             <span class="badge ${highApDays.length > 0 ? 'bg-warning' : 'bg-success'}">
                                 ${highApDays.length > 0 ? 'Active Period' : 'Quiet'}
@@ -939,7 +939,7 @@ class TimeGeometryDashboard {
                         <div class="h2 mb-2 text-info">
                             <i class="fas fa-satellite"></i>
                         </div>
-                        <div class="text-uppercase small text-muted">Forecast Source</div>
+                        <div class="text-uppercase small text-white">Forecast Source</div>
                         <div class="mt-2 small">
                             NOAA 45-day<br>${issueDate}
                         </div>
@@ -979,7 +979,7 @@ class TimeGeometryDashboard {
                         </tbody>
                     </table>
                 </div>
-                ${highApDays.length > 10 ? `<div class="text-center small text-muted mt-2">+ ${highApDays.length - 10} more days</div>` : ''}
+                ${highApDays.length > 10 ? `<div class="text-center small text-white mt-2">+ ${highApDays.length - 10} more days</div>` : ''}
             </div>
         ` : `
             <div class="alert alert-success">
@@ -1150,7 +1150,14 @@ class TimeGeometryDashboard {
         const now = new Date();
         const diffTime = date - now;
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays > 0 ? `+${diffDays}d` : diffDays === 0 ? 'Today' : `${diffDays}d ago`;
+
+        if (diffDays > 0) {
+            return `${diffDays} days from today`;
+        } else if (diffDays === 0) {
+            return 'Today';
+        } else {
+            return `${Math.abs(diffDays)} days ago`;
+        }
     }
 
     isRecentDate(dateString, daysThreshold = 30) {

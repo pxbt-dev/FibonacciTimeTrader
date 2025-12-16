@@ -217,7 +217,7 @@ public class BacktestService {
         Map<Integer, Integer> sampleSizes = new HashMap<>();
 
         // Define Gann periods
-        int[] gannPeriods = {90, 180, 360};
+        int[] gannPeriods = {30, 45, 60, 90, 120, 135, 144, 180, 225, 270, 315, 360, 540, 720};
 
         for (int period : gannPeriods) {
             results.put(period, new ArrayList<>());

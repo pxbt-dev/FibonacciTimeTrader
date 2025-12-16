@@ -14,6 +14,49 @@ import java.util.*;
 @Service
 public class TimeGeometryService {
 
+    public static final int[] COMPREHENSIVE_GANN_PERIODS = {
+            // Short-term cycles (divisions of 360)
+            30,   // 30° - 1 month
+            45,   // 45° - important angle
+            60,   // 60° - 2 months
+            72,   // 1/5 of 360
+            90,   // 90° - quarter year
+            120,  // 120° - 4 months
+            135,  // 135° - 3/8 of circle
+            144,  // MASTER NUMBER - Square of 12
+            150,  // 5/12 of circle
+            180,  // 180° - half year
+            216,  // 3/5 of circle
+            225,  // 225° - 5/8 of circle
+            240,  // 240° - 2/3 of circle
+            270,  // 270° - 3/4 of circle
+            288,  // 4/5 of circle
+            300,  // 300° - 5/6 of circle
+            315,  // 315° - 7/8 of circle
+            330,  // 330° - 11/12 of circle
+            360,  // 360° - full year
+
+            // Square of Seven cycles
+            49,   // 7×7 - important weekly/monthly cycle
+            98,   // 2×49
+            147,  // 3×49
+            196,  // 4×49
+
+            // Medium-term (multiples of 360)
+            540,  // 1.5 years
+            720,  // 2 years
+            900,  // 2.5 years
+            1080, // 3 years
+            1260, // 3.5 years
+            1440  // 4 years
+    };
+
+    // For basic/standard use
+    private static final int[] STANDARD_GANN_PERIODS = {30, 45, 60, 90, 120, 135, 144, 180, 225, 270, 315, 360, 540, 720};
+
+    // For minimal/essential use
+    private static final int[] ESSENTIAL_GANN_PERIODS = {90, 180, 360};
+
     @Autowired
     private BinanceHistoricalService binanceHistoricalService;
 
@@ -39,11 +82,16 @@ public class TimeGeometryService {
         // STEP 1: Get or create MAJOR pivots
         List<PricePivot> majorPivots = getMajorCyclePivots(symbol, monthlyData);
 
+        log.info("🔍 Found {} major pivots for {}", majorPivots.size(), symbol);
+        majorPivots.forEach(p ->
+                log.info("   - {}: ${} on {}", p.getType(), p.getPrice(), p.getDate()));
+
         // Find cycle high and low
         PricePivot cycleHigh = majorPivots.stream()
                 .filter(p -> p.getType().contains("HIGH"))
                 .max(Comparator.comparing(PricePivot::getDate))
                 .orElse(null);
+
 
         PricePivot cycleLow = majorPivots.stream()
                 .filter(p -> p.getType().contains("LOW"))
@@ -278,9 +326,6 @@ public class TimeGeometryService {
     /**
      * Get MAJOR cycle pivots (focus on key levels only)
      */
-    /**
-     * Get MAJOR cycle pivots (focus on key levels only)
-     */
     public List<PricePivot> getMajorCyclePivots(String symbol, List<BinanceHistoricalService.OHLCData> monthlyData) {
         List<PricePivot> pivots = new ArrayList<>();
 
@@ -299,15 +344,15 @@ public class TimeGeometryService {
 
             // SOL: Use known major pivots
             case "SOL" -> {
-                pivots.add(new PricePivot(LocalDate.of(2020, 5, 11), 0.50, "MAJOR_LOW", 1.0));      // Your ATH
+                pivots.add(new PricePivot(LocalDate.of(2020, 5, 11), 0.50, "MAJOR_LOW", 1.0));
 
-                pivots.add(new PricePivot(LocalDate.of(2021, 11, 7), 258.00, "MAJOR_HIGH", 1.0));   // Your data
+                pivots.add(new PricePivot(LocalDate.of(2021, 11, 7), 258.00, "MAJOR_HIGH", 1.0));
 
-                pivots.add(new PricePivot(LocalDate.of(2022, 12, 29), 8.00, "MAJOR_LOW", 0.9));     // Your data
+                pivots.add(new PricePivot(LocalDate.of(2022, 12, 29), 8.00, "MAJOR_LOW", 0.9));
 
-                pivots.add(new PricePivot(LocalDate.of(2024, 3, 18), 210.00, "MAJOR_HIGH", 0.8));   // Your data
+                pivots.add(new PricePivot(LocalDate.of(2024, 3, 18), 210.00, "MAJOR_HIGH", 0.8));
 
-                pivots.add(new PricePivot(LocalDate.of(2025, 1, 19), 293.31, "MAJOR_HIGH", 1.0));   // Your ATH
+                pivots.add(new PricePivot(LocalDate.of(2025, 1, 19), 293.31, "MAJOR_HIGH", 1.0));
 
 
                 log.info("☀️ SOL: Using 5 exact major cycle pivots");
@@ -317,13 +362,13 @@ public class TimeGeometryService {
 
             // TAO: Use known major pivots
             case "TAO" -> {
-                pivots.add(new PricePivot(LocalDate.of(2023, 5, 14), 30.83, "MAJOR_LOW", 1.0));      // Your ATH
+                pivots.add(new PricePivot(LocalDate.of(2023, 5, 14), 30.83, "MAJOR_LOW", 1.0));
 
-                pivots.add(new PricePivot(LocalDate.of(2023, 10, 20), 47.91, "MAJOR_LOW", 0.8));     // Your data
+                pivots.add(new PricePivot(LocalDate.of(2023, 10, 20), 47.91, "MAJOR_LOW", 0.8));
 
-                pivots.add(new PricePivot(LocalDate.of(2023, 12, 16), 348.05, "MAJOR_HIGH", 0.9));   // Your data
+                pivots.add(new PricePivot(LocalDate.of(2023, 12, 16), 348.05, "MAJOR_HIGH", 0.9));
 
-                pivots.add(new PricePivot(LocalDate.of(2024, 3, 7), 757.60, "MAJOR_HIGH", 1.0));     // Your ATH
+                pivots.add(new PricePivot(LocalDate.of(2024, 3, 7), 757.60, "MAJOR_HIGH", 1.0));
 
 
                 log.info("🧠 TAO: Using 4 exact major cycle pivots");
@@ -333,15 +378,15 @@ public class TimeGeometryService {
 
             // WIF: Use known major pivots
             case "WIF" -> {
-                pivots.add(new PricePivot(LocalDate.of(2023, 12, 13), 0.001555, "MAJOR_LOW", 1.0));   // Your ATH
+                pivots.add(new PricePivot(LocalDate.of(2023, 12, 13), 0.001555, "MAJOR_LOW", 1.0));
 
-                pivots.add(new PricePivot(LocalDate.of(2024, 1, 4), 4.83, "MAJOR_HIGH", 1.0));        // Your data (ATH?)
+                pivots.add(new PricePivot(LocalDate.of(2024, 1, 4), 4.83, "MAJOR_HIGH", 1.0));
 
-                pivots.add(new PricePivot(LocalDate.of(2024, 3, 15), 3.16, "MAJOR_HIGH", 0.8));       // Your data
+                pivots.add(new PricePivot(LocalDate.of(2024, 3, 15), 3.16, "MAJOR_HIGH", 0.8));
 
-                pivots.add(new PricePivot(LocalDate.of(2024, 8, 6), 1.27, "MAJOR_LOW", 0.9));         // Your data
+                pivots.add(new PricePivot(LocalDate.of(2024, 8, 6), 1.27, "MAJOR_LOW", 0.9));
 
-                pivots.add(new PricePivot(LocalDate.of(2024, 11, 14), 4.19, "MAJOR_HIGH", 0.7));      // From your description
+                pivots.add(new PricePivot(LocalDate.of(2024, 11, 14), 4.19, "MAJOR_HIGH", 0.7));
 
 
                 log.info("🐶 WIF: Using 5 exact major cycle pivots");
@@ -389,12 +434,23 @@ public class TimeGeometryService {
 
         for (PricePivot pivot : majorPivots) {
             // Only create Gann dates from recent pivots (last 5 years)
-            if (pivot.getDate().isAfter(LocalDate.now().minusYears(5))) {
-                gannDates.add(new GannDate(pivot.getDate().plusDays(90), "90D_ANNIVERSARY", pivot));
-                gannDates.add(new GannDate(pivot.getDate().plusDays(180), "180D_ANNIVERSARY", pivot));
-                gannDates.add(new GannDate(pivot.getDate().plusDays(360), "360D_ANNIVERSARY", pivot));
+            if (pivot.getDate().isAfter(LocalDate.now().minusYears(2))) {
+                // Use STANDARD periods for now - we can add toggle later
+                for (int period : STANDARD_GANN_PERIODS) {
+                    // Only add if the date is reasonable (within 5 years from pivot)
+                    if (period <= 1440) { // Max 4 years for standard projections
+                        gannDates.add(new GannDate(
+                                pivot.getDate().plusDays(period),
+                                period + "D_ANNIVERSARY",
+                                pivot
+                        ));
+                    }
+                }
             }
         }
+
+        // Log how many Gann dates were created
+        log.info("Created {} Gann dates from {} pivots", gannDates.size(), majorPivots.size());
 
         return gannDates;
     }

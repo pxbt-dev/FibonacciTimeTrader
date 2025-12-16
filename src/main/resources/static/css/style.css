@@ -1,42 +1,57 @@
 :root {
-    --bg-primary: #0f172a;
-    --bg-secondary: #1e293b;
-    --bg-card: #1e293b;
-    --bg-hover: #334155;
-    --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
-    --border-color: #334155;
-    --primary-color: #3b82f6;
-    --success-color: #10b981;
-    --warning-color: #f59e0b;
-    --danger-color: #ef4444;
-    --info-color: #06b6d4;
-    --purple-accent: #8b5cf6;
-    --glass-bg: rgba(30, 41, 59, 0.7);
-    --glass-border: rgba(255, 255, 255, 0.1);
+    /* Background Colors */
+    --bg-primary: #0f172a;        /* Dark blue background for main body */
+    --bg-secondary: #1e293b;      /* Slightly lighter blue for cards/containers */
+    --bg-card: #1e293b;           /* Background for cards (same as secondary) */
+    --bg-hover: #334155;          /* Background on hover states */
 
-    /* Ratio type colors */
-    --harmonic-color: #8b5cf6;
-    --geometric-color: #f59e0b;
-    --double-color: #10b981;
-    --triple-color: #ef4444;
-    --quadruple-color: #8b5cf6;
-    --fibonacci-color: #3b82f6;
+    /* Text Colors */
+    --text-primary: #f1f5f9;      /* Primary text color (white-ish) */
+    --text-secondary: #94a3b8;    /* Secondary/muted text color (light blue-gray) */
+    --text-white: #64748b;        /* White text color (note: this is actually gray) */
+
+    /* Border Colors */
+    --border-color: #334155;      /* Border color for cards, inputs, etc. */
+
+    /* Brand/Theme Colors */
+    --primary-color: #3b82f6;     /* Primary brand color (blue) */
+    --success-color: #10b981;     /* Success/green color */
+    --warning-color: #f59e0b;     /* Warning/orange color */
+    --danger-color: #ef4444;      /* Danger/red color */
+    --info-color: #06b6d4;        /* Info/cyan color */
+    --purple-accent: #8b5cf6;     /* Purple accent color */
+
+    /* Glass Effect Variables */
+    --glass-bg: rgba(30, 41, 59, 0.7);      /* Semi-transparent background */
+    --glass-border: rgba(255, 255, 255, 0.1); /* Semi-transparent border */
+
+    /* Ratio Type Colors (for Fibonacci/Harmonic levels) */
+    --harmonic-color: #8b5cf6;    /* Purple for Harmonic ratios */
+    --geometric-color: #f59e0b;   /* Orange for Geometric ratios */
+    --double-color: #10b981;      /* Green for Double extensions */
+    --triple-color: #ef4444;      /* Red for Triple extensions */
+    --quadruple-color: #8b5cf6;   /* Purple for Quadruple extensions */
+    --fibonacci-color: #3b82f6;   /* Blue for Fibonacci ratios */
 }
 
+/* ============================================
+   BASE/BODY STYLES
+   ============================================ */
 body {
     background: linear-gradient(135deg, var(--bg-primary) 0%, #1a1f3a 100%);
     color: var(--text-primary);
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     min-height: 100vh;
-    background-attachment: fixed;
+    background-attachment: fixed; /* Keeps gradient fixed during scroll */
 }
 
-/* Glass Card Styling */
+/* ============================================
+   GLASS CARD COMPONENT
+   Creates a frosted glass effect for cards
+   ============================================ */
 .glass-card {
     background: var(--glass-bg);
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px); /* Creates the glass blur effect */
     border: 1px solid var(--glass-border);
     border-radius: 16px;
     padding: 1.5rem;
@@ -47,10 +62,12 @@ body {
 
 .glass-card:hover {
     box-shadow: 0 12px 48px rgba(0, 0, 0, 0.3);
-    transform: translateY(-2px);
+    transform: translateY(-2px); /* Slight lift on hover */
 }
 
-.glass-card h1, .glass-card h2, .glass-card h3, .glass-card h4, .glass-card h5 {
+/* Headings inside glass cards */
+.glass-card h1, .glass-card h2, .glass-card h3,
+.glass-card h4, .glass-card h5 {
     color: var(--text-primary);
     font-weight: 600;
 }
@@ -62,7 +79,9 @@ body {
     font-size: 1.5rem;
 }
 
-/* Symbol Tabs */
+/* ============================================
+   SYMBOL TABS (BTC/SOL/TAO/WIF selector)
+   ============================================ */
 .symbol-tabs {
     display: flex;
     gap: 12px;
@@ -103,7 +122,9 @@ body {
     margin-right: 8px;
 }
 
-/* Date Cards */
+/* ============================================
+   DATE CARDS (Used for Gann dates, Fibonacci levels, etc.)
+   ============================================ */
 .date-card {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
@@ -119,6 +140,7 @@ body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
+/* Date header inside date cards */
 .date-card .date {
     font-weight: 600;
     font-size: 1.1rem;
@@ -129,39 +151,46 @@ body {
     align-items: center;
 }
 
+/* PROBLEM AREA: This is overriding text-white class! */
 .date-card .description {
-    color: var(--text-secondary);
+    color: var(--text-secondary); /* This makes text gray instead of white */
     font-size: 0.9rem;
     line-height: 1.4;
 }
 
+/* Intensity indicator (for vortex windows) */
 .date-card .intensity {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-/* Special Card Styles */
+/* ============================================
+   SPECIAL CARD STYLES (Different border colors)
+   ============================================ */
 .date-card.vortex-highlight {
-    border-left: 4px solid var(--danger-color);
-    background: rgba(239, 68, 68, 0.05);
+    border-left: 4px solid var(--danger-color); /* Red left border */
+    background: rgba(239, 68, 68, 0.05); /* Light red background */
 }
 
 .date-card.major-highlight {
-    border-left: 4px solid var(--warning-color);
-    background: rgba(245, 158, 11, 0.05);
+    border-left: 4px solid var(--warning-color); /* Orange left border */
+    background: rgba(245, 158, 11, 0.05); /* Light orange background */
 }
 
 .date-card.gann-date-card {
-    border-left: 4px solid var(--success-color);
+    border-left: 4px solid var(--success-color); /* Green left border for Gann dates */
 }
 
 .date-card.key-level {
-    border: 2px solid var(--warning-color);
-    background: rgba(245, 158, 11, 0.08);
+    border: 2px solid var(--warning-color); /* Thicker orange border */
+    background: rgba(245, 158, 11, 0.08); /* Slightly darker orange background */
 }
 
-/* Ratio Type Classes - COMBINED AND CLEANED */
+/* ============================================
+   RATIO TYPE CLASSES (For Fibonacci/Harmonic levels)
+   Different colored left borders for different ratio types
+   ============================================ */
 .date-card.harmonic {
     border-left: 4px solid var(--harmonic-color) !important;
     background: rgba(139, 92, 246, 0.05) !important;
@@ -192,7 +221,10 @@ body {
     background: rgba(139, 92, 246, 0.05) !important;
 }
 
-/* Converging Signals */
+/* ============================================
+   CONVERGING SIGNALS SECTION
+   For dates with multiple signals (Fibonacci + Gann + Solar)
+   ============================================ */
 .converging-signals {
     background: rgba(30, 41, 59, 0.5);
     border-radius: 8px;
@@ -200,7 +232,9 @@ body {
     margin: 0.5rem 0;
 }
 
-/* Additional Alignments */
+/* ============================================
+   ADDITIONAL ALIGNMENTS (Expandable sections)
+   ============================================ */
 .additional-alignments {
     margin-top: 0.5rem;
 }
@@ -226,21 +260,25 @@ body {
     border-radius: 8px;
     padding: 0.75rem;
     margin-bottom: 0.5rem;
-    border-left: 3px solid var(--info-color);
+    border-left: 3px solid var(--info-color); /* Cyan left border */
 }
 
-/* Signal Badges */
+/* ============================================
+   SIGNAL TEXT COLORS
+   ============================================ */
 .signal-positive {
-    color: var(--success-color);
+    color: var(--success-color); /* Green for positive signals */
     font-weight: 600;
 }
 
 .signal-negative {
-    color: var(--danger-color);
+    color: var(--danger-color); /* Red for negative signals */
     font-weight: 600;
 }
 
-/* Chart Container */
+/* ============================================
+   CHART CONTAINER
+   ============================================ */
 .chart-container {
     position: relative;
     height: 400px;
@@ -249,7 +287,9 @@ body {
     padding: 1rem;
 }
 
-/* Table Styling */
+/* ============================================
+   TABLE STYLING (For solar data table)
+   ============================================ */
 .table {
     color: var(--text-primary);
     background: var(--bg-secondary);
@@ -272,6 +312,7 @@ body {
     background: var(--bg-hover);
 }
 
+/* Dark theme table overrides */
 .table.table-dark {
     background-color: var(--bg-secondary);
     color: var(--text-primary);
@@ -292,7 +333,9 @@ body {
     background-color: var(--bg-hover);
 }
 
-/* Alert Styling */
+/* ============================================
+   ALERT STYLING (Info/Warning/Success/Danger boxes)
+   ============================================ */
 .alert {
     border-radius: 10px;
     border: 1px solid transparent;
@@ -324,7 +367,9 @@ body {
     border-color: rgba(239, 68, 68, 0.3);
 }
 
-/* Button Styling */
+/* ============================================
+   BUTTON STYLING
+   ============================================ */
 .btn-primary {
     background: linear-gradient(135deg, var(--primary-color) 0%, #2563eb 100%);
     border: none;
@@ -351,7 +396,9 @@ body {
     color: var(--text-primary);
 }
 
-/* Badge Styling */
+/* ============================================
+   BADGE STYLING (Small colored labels)
+   ============================================ */
 .badge {
     font-weight: 600;
     padding: 0.4em 0.8em;
@@ -359,7 +406,7 @@ body {
     border-radius: 6px;
 }
 
-/* Standard Bootstrap badge colors */
+/* Standard Bootstrap badge color overrides */
 .bg-primary { background-color: var(--primary-color) !important; }
 .bg-success { background-color: var(--success-color) !important; }
 .bg-warning { background-color: var(--warning-color) !important; color: #000; }
@@ -367,7 +414,7 @@ body {
 .bg-info { background-color: var(--info-color) !important; }
 .bg-secondary { background-color: #4b5563 !important; color: #f1f5f9 !important; }
 
-/* Ratio Type Badges - COMBINED AND CLEANED */
+/* Ratio Type Badges (matching the card border colors) */
 .badge-harmonic { background-color: var(--harmonic-color) !important; color: white !important; }
 .badge-geometric { background-color: var(--geometric-color) !important; color: black !important; }
 .badge-double { background-color: var(--double-color) !important; color: white !important; }
@@ -375,7 +422,9 @@ body {
 .badge-quadruple { background-color: var(--quadruple-color) !important; color: white !important; }
 .badge-fibonacci { background-color: var(--fibonacci-color) !important; color: white !important; }
 
-/* Dark theme for cards */
+/* ============================================
+   CARD DARK THEME
+   ============================================ */
 .card.bg-dark {
     background-color: var(--bg-secondary) !important;
     border-color: var(--border-color) !important;
@@ -385,7 +434,9 @@ body {
     color: var(--text-primary);
 }
 
-/* Make display numbers more visible */
+/* ============================================
+   DISPLAY NUMBERS (Large numbers in solar dashboard)
+   ============================================ */
 .display-4 {
     color: var(--text-primary);
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
@@ -397,14 +448,18 @@ body {
 .display-4.text-primary { color: var(--primary-color) !important; }
 .display-4.text-danger { color: var(--danger-color) !important; }
 
-/* Footer */
+/* ============================================
+   FOOTER
+   ============================================ */
 footer {
     border-top: 1px solid var(--border-color);
     padding-top: 1.5rem;
     margin-top: 2rem;
 }
 
-/* Responsive */
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
 @media (max-width: 768px) {
     .symbol-tabs {
         justify-content: center;
@@ -421,7 +476,9 @@ footer {
     }
 }
 
-/* Custom Scrollbar */
+/* ============================================
+   CUSTOM SCROLLBAR
+   ============================================ */
 ::-webkit-scrollbar {
     width: 10px;
 }
