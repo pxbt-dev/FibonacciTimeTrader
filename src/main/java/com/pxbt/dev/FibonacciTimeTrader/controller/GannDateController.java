@@ -2,7 +2,9 @@ package com.pxbt.dev.FibonacciTimeTrader.controller;
 
 import com.pxbt.dev.FibonacciTimeTrader.model.GannDate;
 import com.pxbt.dev.FibonacciTimeTrader.model.PricePivot;
+import com.pxbt.dev.FibonacciTimeTrader.model.VortexAnalysis;
 import com.pxbt.dev.FibonacciTimeTrader.service.BinanceHistoricalService;
+import com.pxbt.dev.FibonacciTimeTrader.service.TimeGeometryService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -22,115 +24,15 @@ public class GannDateController {
     @Autowired
     private BinanceHistoricalService binanceHistoricalService;
 
+    @Autowired
+    private TimeGeometryService timeGeometryService;
+
     private static final int[] GANN_PERIODS = {90, 180, 360};
     private static final int PIVOT_LOOKBACK_DAYS = 10;
 
     /**
      * Get pure Gann dates for a symbol
      */
-//    @GetMapping("/dates/{symbol}")
-//    public ResponseEntity<?> getGannDates(@PathVariable String symbol) {
-//        try {
-//            log.info("📅 Fetching MAJOR Gann dates for {}", symbol);
-//
-//            // Get monthly data for major cycle detection
-//            List<BinanceHistoricalService.OHLCData> monthlyData =
-//                    binanceHistoricalService.getMonthlyData(symbol);
-//
-//            if (monthlyData == null || monthlyData.isEmpty()) {
-//                return ResponseEntity.ok(Collections.emptyList());
-//            }
-//
-//            // 1. Get ONLY MAJOR cycle pivots (same as TimeGeometryService)
-//            List<PricePivot> majorPivots = new ArrayList<>();
-//
-//            // For BTC: Use the known major pivots
-//            if (symbol.equals("BTC")) {
-//                majorPivots.add(new PricePivot(LocalDate.of(2018, 12, 15), 3100.0, "MAJOR_LOW", 1.0));
-//                majorPivots.add(new PricePivot(LocalDate.of(2023, 1, 1), 15455.0, "MAJOR_LOW", 0.9));
-//                majorPivots.add(new PricePivot(LocalDate.of(2024, 3, 1), 72000.0, "MAJOR_HIGH", 0.8));
-//                majorPivots.add(new PricePivot(LocalDate.of(2025, 10, 1), 126272.76, "MAJOR_HIGH", 1.0));
-//
-//                log.info("💰 BTC: Using 4 major cycle pivots for Gann dates");
-//            } else {
-//                // For other symbols, find the most significant pivots
-//                if (monthlyData.size() >= 24) {
-//                    BinanceHistoricalService.OHLCData lowest = monthlyData.stream()
-//                            .min(Comparator.comparingDouble(BinanceHistoricalService.OHLCData::low))
-//                            .orElse(null);
-//                    BinanceHistoricalService.OHLCData highest = monthlyData.stream()
-//                            .max(Comparator.comparingDouble(BinanceHistoricalService.OHLCData::high))
-//                            .orElse(null);
-//
-//                    if (lowest != null) {
-//                        majorPivots.add(new PricePivot(
-//                                convertTimestampToDate(lowest.timestamp()),
-//                                lowest.low(),
-//                                "MAJOR_LOW",
-//                                1.0
-//                        ));
-//                    }
-//
-//                    if (highest != null) {
-//                        majorPivots.add(new PricePivot(
-//                                convertTimestampToDate(highest.timestamp()),
-//                                highest.high(),
-//                                "MAJOR_HIGH",
-//                                1.0
-//                        ));
-//                    }
-//                }
-//            }
-//
-//            // 2. Generate Gann dates ONLY from these major pivots
-//            List<GannDate> gannDates = new ArrayList<>();
-//            int[] gannPeriods = {90, 180, 360};
-//
-//            for (PricePivot pivot : majorPivots) {
-//                for (int period : gannPeriods) {
-//                    LocalDate gannDate = pivot.getDate().plusDays(period);
-//
-//                    // Only include future dates
-//                    if (gannDate.isAfter(LocalDate.now())) {
-//                        GannDate gann = new GannDate(
-//                                gannDate,
-//                                period + "D_ANNIVERSARY",
-//                                pivot
-//                        );
-//                        gannDates.add(gann);
-//                    }
-//                }
-//            }
-//
-//            // 3. Sort by date
-//            gannDates.sort(Comparator.comparing(GannDate::getDate));
-//
-//            // Limit to next 12 dates
-//            List<GannDate> limitedDates = gannDates.stream()
-//                    .limit(12)
-//                    .collect(Collectors.toList());
-//
-//            log.info("✅ Generated {} Gann dates from {} major pivots for {}",
-//                    limitedDates.size(), majorPivots.size(), symbol);
-//
-//            // 4. Log the dates for debugging
-//            log.info("📅 MAJOR Gann Dates for {}:", symbol);
-//            limitedDates.forEach(gann ->
-//                    log.info("   {}: {} from {} (${}) on {}",
-//                            gann.getDate(),
-//                            gann.getType(),
-//                            gann.getSourcePivot().getType(),
-//                            String.format("%,.0f", gann.getSourcePivot().getPrice()),
-//                            gann.getSourcePivot().getDate()));
-//
-//            return ResponseEntity.ok(limitedDates);
-//
-//        } catch (Exception e) {
-//            log.error("❌ Failed to get Gann dates for {}: {}", symbol, e.getMessage(), e);
-//            return ResponseEntity.status(500)
-//                    .body(Map.of("error", "Failed to get Gann dates", "message", e.getMessage()));
-//        }
-//    }
 
     @GetMapping("/dates/{symbol}")
     public ResponseEntity<?> getGannDates(@PathVariable String symbol) {
@@ -493,5 +395,54 @@ public class GannDateController {
         List<LocalDate> pivotDates = findSignificantPivots(historicalData);
         List<PricePivot> pricePivots = convertToPricePivots(historicalData, pivotDates);
         return generateGannDatesFromPivots(pricePivots);
+    }
+
+    @GetMapping("/debug/analysis/{symbol}")
+    public ResponseEntity<?> debugAnalysis(@PathVariable String symbol) {
+        try {
+            VortexAnalysis analysis = timeGeometryService.analyzeSymbol(symbol);
+
+            Map<String, Object> debug = new HashMap<>();
+            debug.put("symbol", symbol);
+            debug.put("hasHistoricalData", analysis != null);
+
+            if (analysis != null) {
+                debug.put("timeProjections", analysis.getFibonacciTimeProjections() != null ?
+                        analysis.getFibonacciTimeProjections().size() : 0);
+                debug.put("priceLevels", analysis.getFibonacciPriceLevels() != null ?
+                        analysis.getFibonacciPriceLevels().size() : 0);
+                debug.put("gannDates", analysis.getGannDates() != null ?
+                        analysis.getGannDates().size() : 0);
+                debug.put("vortexWindows", analysis.getVortexWindows() != null ?
+                        analysis.getVortexWindows().size() : 0);
+
+                // Show first few Gann dates
+                if (analysis.getGannDates() != null && !analysis.getGannDates().isEmpty()) {
+                    List<Map<String, Object>> sampleGann = new ArrayList<>();
+
+                    for (int i = 0; i < Math.min(3, analysis.getGannDates().size()); i++) {
+                        GannDate g = analysis.getGannDates().get(i);
+                        Map<String, Object> gannMap = new HashMap<>();
+                        gannMap.put("date", g.getDate());
+                        gannMap.put("type", g.getType());
+                        gannMap.put("sourceDate", g.getSourcePivot().getDate());
+                        gannMap.put("sourcePrice", g.getSourcePivot().getPrice());
+                        sampleGann.add(gannMap);
+                    }
+
+                    debug.put("sampleGannDates", sampleGann);
+                }
+            }
+
+            return ResponseEntity.ok(debug);
+
+        } catch (Exception e) {
+            log.error("Debug analysis failed for {}: {}", symbol, e.getMessage(), e);
+            return ResponseEntity.status(500)
+                    .body(Map.of(
+                            "error", "Debug analysis failed",
+                            "message", e.getMessage()
+                    ));
+        }
     }
 }

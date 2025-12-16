@@ -62,6 +62,13 @@ public class TimeGeometryService {
         List<GannDate> gannDates = calculateMajorGannDates(majorPivots);
         analysis.setGannDates(gannDates);
 
+        // DEBUG: Log Gann dates
+        gannDates.forEach(gann ->
+                log.info("   📅 {}: {} from {} (${})",
+                        gann.getDate(), gann.getType(),
+                        gann.getSourcePivot().getDate(),
+                        gann.getSourcePivot().getPrice()));
+
         // STEP 5: Generate vortex windows (alignment dates)
         List<VortexWindow> vortexWindows = identifyMajorVortexWindows(timeProjections, gannDates);
         analysis.setVortexWindows(vortexWindows);
@@ -271,23 +278,79 @@ public class TimeGeometryService {
     /**
      * Get MAJOR cycle pivots (focus on key levels only)
      */
+    /**
+     * Get MAJOR cycle pivots (focus on key levels only)
+     */
     public List<PricePivot> getMajorCyclePivots(String symbol, List<BinanceHistoricalService.OHLCData> monthlyData) {
         List<PricePivot> pivots = new ArrayList<>();
 
         // For BTC: Use known major pivots
-        if (symbol.equals("BTC")) {
-            pivots.add(new PricePivot(LocalDate.of(2018, 12, 15), 3100.0, "MAJOR_LOW", 1.0));
-            pivots.add(new PricePivot(LocalDate.of(2023, 1, 1), 15455.0, "MAJOR_LOW", 0.9));
-            pivots.add(new PricePivot(LocalDate.of(2024, 3, 1), 72000.0, "MAJOR_HIGH", 0.8));
-            pivots.add(new PricePivot(LocalDate.of(2025, 10, 1), 126272.76, "MAJOR_HIGH", 1.0));
+        switch (symbol) {
+            case "BTC" -> {
+                pivots.add(new PricePivot(LocalDate.of(2018, 12, 15), 3100.0, "MAJOR_LOW", 1.0));
+                pivots.add(new PricePivot(LocalDate.of(2023, 1, 1), 15455.0, "MAJOR_LOW", 0.9));
+                pivots.add(new PricePivot(LocalDate.of(2024, 3, 1), 72000.0, "MAJOR_HIGH", 0.8));
+                pivots.add(new PricePivot(LocalDate.of(2025, 10, 1), 126272.76, "MAJOR_HIGH", 1.0));
 
-            log.info("💰 BTC: Using 4 major cycle pivots");
-            return pivots;
+                log.info("💰 BTC: Using 4 major cycle pivots");
+                return pivots;
+            }
+
+
+            // SOL: Use known major pivots
+            case "SOL" -> {
+                pivots.add(new PricePivot(LocalDate.of(2020, 5, 11), 0.50, "MAJOR_LOW", 1.0));      // Your ATH
+
+                pivots.add(new PricePivot(LocalDate.of(2021, 11, 7), 258.00, "MAJOR_HIGH", 1.0));   // Your data
+
+                pivots.add(new PricePivot(LocalDate.of(2022, 12, 29), 8.00, "MAJOR_LOW", 0.9));     // Your data
+
+                pivots.add(new PricePivot(LocalDate.of(2024, 3, 18), 210.00, "MAJOR_HIGH", 0.8));   // Your data
+
+                pivots.add(new PricePivot(LocalDate.of(2025, 1, 19), 293.31, "MAJOR_HIGH", 1.0));   // Your ATH
+
+
+                log.info("☀️ SOL: Using 5 exact major cycle pivots");
+                return pivots;
+            }
+
+
+            // TAO: Use known major pivots
+            case "TAO" -> {
+                pivots.add(new PricePivot(LocalDate.of(2023, 5, 14), 30.83, "MAJOR_LOW", 1.0));      // Your ATH
+
+                pivots.add(new PricePivot(LocalDate.of(2023, 10, 20), 47.91, "MAJOR_LOW", 0.8));     // Your data
+
+                pivots.add(new PricePivot(LocalDate.of(2023, 12, 16), 348.05, "MAJOR_HIGH", 0.9));   // Your data
+
+                pivots.add(new PricePivot(LocalDate.of(2024, 3, 7), 757.60, "MAJOR_HIGH", 1.0));     // Your ATH
+
+
+                log.info("🧠 TAO: Using 4 exact major cycle pivots");
+                return pivots;
+            }
+
+
+            // WIF: Use known major pivots
+            case "WIF" -> {
+                pivots.add(new PricePivot(LocalDate.of(2023, 12, 13), 0.001555, "MAJOR_LOW", 1.0));   // Your ATH
+
+                pivots.add(new PricePivot(LocalDate.of(2024, 1, 4), 4.83, "MAJOR_HIGH", 1.0));        // Your data (ATH?)
+
+                pivots.add(new PricePivot(LocalDate.of(2024, 3, 15), 3.16, "MAJOR_HIGH", 0.8));       // Your data
+
+                pivots.add(new PricePivot(LocalDate.of(2024, 8, 6), 1.27, "MAJOR_LOW", 0.9));         // Your data
+
+                pivots.add(new PricePivot(LocalDate.of(2024, 11, 14), 4.19, "MAJOR_HIGH", 0.7));      // From your description
+
+
+                log.info("🐶 WIF: Using 5 exact major cycle pivots");
+                return pivots;
+            }
         }
 
-        // For other coins: Find 2-4 most significant pivots
-        if (monthlyData.size() >= 24) { // Need 2+ years
-            // Find highest high and lowest low
+        // For other symbols: Find 2-4 most significant pivots (fallback - should not happen for our 4 coins)
+        if (monthlyData != null && monthlyData.size() >= 24) {
             BinanceHistoricalService.OHLCData lowest = monthlyData.stream()
                     .min(Comparator.comparingDouble(BinanceHistoricalService.OHLCData::low))
                     .orElse(null);
@@ -314,6 +377,7 @@ public class TimeGeometryService {
             }
         }
 
+        log.info("📊 {}: Found {} major pivots", symbol, pivots.size());
         return pivots;
     }
 
