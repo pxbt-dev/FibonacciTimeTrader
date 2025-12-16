@@ -85,7 +85,7 @@ class TimeGeometryDashboard {
         }
     }
 
-    // FIXED: Load Gann dates with proper time range
+    // Load Gann dates with proper time range
     async loadGannDates(symbol) {
         const container = document.getElementById('gannDates');
         if (!container) return;
@@ -128,7 +128,7 @@ class TimeGeometryDashboard {
         }
     }
 
-    // FIXED: Render Gann dates including future dates
+    // Render Gann dates including future dates
     renderGannDatesList(gannDates) {
         const container = document.getElementById('gannDates');
         if (!container) return;
@@ -364,17 +364,18 @@ class TimeGeometryDashboard {
         }
     }
 
+    // FIXED: Enhanced alignment dates rendering WITHOUT expandable dropdown
     renderAlignmentDates(alignmentDates) {
         const container = document.getElementById('upcomingDates');
         if (!container) return;
 
         if (!alignmentDates || alignmentDates.length === 0) {
             container.innerHTML = `
-                <div class="alert alert-info">
-                    <i class="fas fa-calendar-check me-2"></i>
-                    No Fibonacci/Gann alignment dates detected
-                </div>
-            `;
+            <div class="alert alert-info">
+                <i class="fas fa-calendar-check me-2"></i>
+                No Fibonacci/Gann alignment dates detected
+            </div>
+        `;
             return;
         }
 
@@ -407,11 +408,11 @@ class TimeGeometryDashboard {
 
         if (futureDates.length === 0) {
             container.innerHTML = `
-                <div class="alert alert-info">
-                    <i class="fas fa-calendar-check me-2"></i>
-                    No upcoming alignment dates
-                </div>
-            `;
+            <div class="alert alert-info">
+                <i class="fas fa-calendar-check me-2"></i>
+                No upcoming alignment dates
+            </div>
+        `;
             return;
         }
 
@@ -443,88 +444,63 @@ class TimeGeometryDashboard {
             const otherSignals = uniqueSignals.filter(s => s.type === 'other');
 
             col.innerHTML = `
-                <div class="date-card ${group.maxIntensity > 0.8 ? 'vortex-highlight' : ''}">
-                    <div class="date">
-                        ${this.formatDate(group.date)}
-                        <span class="float-end">
-                            <span class="badge ${group.maxIntensity > 0.8 ? 'bg-danger' : group.maxIntensity > 0.5 ? 'bg-warning' : 'bg-primary'}">
-                                ${(group.maxIntensity * 100).toFixed(0)}%
-                            </span>
-                        </span>
-                    </div>
-                    
-                    <div class="converging-signals mb-2">
-                        <div class="d-flex align-items-center mb-1">
-                            <small class="text-muted me-2">Signals:</small>
-                            ${uniqueSignals.slice(0, 3).map(signal =>
-                `<span class="badge ${signal.type === 'fibonacci' ? 'bg-primary' : signal.type === 'gann' ? 'bg-success' : 'bg-secondary'} me-1">${signal.label}</span>`
+    <div class="date-card ${group.maxIntensity > 0.8 ? 'vortex-highlight' : ''}">
+        <div class="date">
+            ${this.formatDate(group.date)}
+            <span class="float-end">
+                <span class="badge ${group.maxIntensity > 0.8 ? 'bg-danger' : group.maxIntensity > 0.5 ? 'bg-warning' : 'bg-primary'}">
+                    ${(group.maxIntensity * 100).toFixed(0)}%
+                </span>
+            </span>
+        </div>
+        
+        <div class="converging-signals mb-2">
+            <div class="d-flex align-items-center mb-1">
+                <small class="text-white me-2">Signals:</small>
+                ${uniqueSignals.map(signal =>
+                `<span class="badge ${signal.type === 'fibonacci' ? 'bg-primary' : signal.type === 'gann' ? 'bg-success' : 'bg-warning'} me-1 mb-1">${signal.label}</span>`
             ).join('')}
-                            ${uniqueSignals.length > 3 ? `<span class="badge bg-dark">+${uniqueSignals.length - 3}</span>` : ''}
-                        </div>
-                    </div>
-                    
-                    <div class="description mb-2">
-                        <div class="mb-1">
-                            ${fibSignals.length > 0 ? `<span class="text-primary">${fibSignals.length} Fibonacci</span>` : ''}
-                            ${gannSignals.length > 0 ? `<span class="text-success">${gannSignals.length} Gann</span>` : ''}
-                            ${otherSignals.length > 0 ? `<span class="text-warning">${otherSignals.length} Other</span>` : ''}
-                        </div>
-                        <div class="small text-muted">
-                            ${this.daysFromNow(group.date)}
-                        </div>
-                    </div>
-                    
-                    <!-- Expandable details for "other signals" -->
-                    ${otherSignals.length > 0 ? `
-                        <div class="additional-alignments mt-2">
-                            <button class="btn btn-sm btn-outline-secondary btn-toggle w-100" 
-                                    onclick="this.nextElementSibling.classList.toggle('d-none'); this.querySelector('i').classList.toggle('fa-rotate-90')">
-                                <i class="fas fa-chevron-right fa-xs"></i>
-                                Show ${otherSignals.length} other signal${otherSignals.length > 1 ? 's' : ''}
-                            </button>
-                            <div class="d-none mt-2">
-                                ${otherSignals.map(signal => `
-                                    <div class="additional-alignment small mb-1 p-2 bg-dark rounded">
-                                        <i class="fas fa-info-circle me-1"></i>
-                                        ${signal.rawFactor || signal.label}
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : ''}
-                    
-                    <!-- Expandable additional alignments if multiple -->
-                    ${hasMultiple ? `
-                        <div class="additional-alignments mt-2">
-                            <button class="btn btn-sm btn-outline-info btn-toggle w-100" 
-                                    onclick="this.nextElementSibling.classList.toggle('d-none'); this.querySelector('i').classList.toggle('fa-rotate-90')">
-                                <i class="fas fa-chevron-right fa-xs"></i>
-                                Show ${group.alignments.length - 1} additional alignment${group.alignments.length > 2 ? 's' : ''}
-                            </button>
-                            <div class="d-none mt-2">
-                                ${group.alignments.slice(1).map((alignment, idx) => {
+            </div>
+        </div>
+        
+        <div class="description mb-2">
+            <div class="small text-white">
+                ${this.daysFromNow(group.date)}
+            </div>
+        </div>
+        
+        <!-- Only show expandable for multiple alignments (different timeframes) -->
+        ${hasMultiple ? `
+            <div class="additional-alignments mt-2">
+                <button class="btn btn-sm btn-outline-info btn-toggle w-100" 
+                        onclick="this.nextElementSibling.classList.toggle('d-none'); this.querySelector('i').classList.toggle('fa-rotate-90')">
+                    <i class="fas fa-chevron-right fa-xs"></i>
+                    Show ${group.alignments.length - 1} additional alignment${group.alignments.length > 2 ? 's' : ''}
+                </button>
+                <div class="d-none mt-2">
+                    ${group.alignments.slice(1).map((alignment, idx) => {
                 const signals = this.parseConvergingSignals(alignment.contributingFactors || []);
                 return `
-                                            <div class="additional-alignment small mb-2 p-2 bg-dark rounded">
-                                                <div class="d-flex justify-content-between align-items-center">
-                                                    <div>
-                                                        ${signals.map(s =>
-                    `<span class="badge ${s.type === 'fibonacci' ? 'bg-primary' : s.type === 'gann' ? 'bg-success' : 'bg-secondary'} me-1">${s.label}</span>`
+                            <div class="additional-alignment small mb-2 p-2 bg-dark rounded">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        ${signals.map(s =>
+                    `<span class="badge ${s.type === 'fibonacci' ? 'bg-primary' : s.type === 'gann' ? 'bg-success' : 'bg-warning'} me-1">${s.label}</span>`
                 ).join('')}
-                                                    </div>
-                                                    <span class="badge ${alignment.intensity > 0.8 ? 'bg-danger' : alignment.intensity > 0.5 ? 'bg-warning' : 'bg-info'}">
-                                                        ${(alignment.intensity * 100).toFixed(0)}%
-                                                    </span>
-                                                </div>
-                                                ${alignment.description ? `<div class="text-muted mt-1 small">${alignment.description}</div>` : ''}
-                                            </div>
-                                        `;
-            }).join('')}
+                                    </div>
+                                    <span class="badge ${alignment.intensity > 0.8 ? 'bg-danger' : alignment.intensity > 0.5 ? 'bg-warning' : 'bg-info'}">
+                                        ${(alignment.intensity * 100).toFixed(0)}%
+                                    </span>
+                                </div>
+                                ${alignment.description ? `<div class="text-muted mt-1 small">${alignment.description}</div>` : ''}
                             </div>
-                        </div>
-                    ` : ''}
+                        `;
+            }).join('')}
                 </div>
-            `;
+            </div>
+        ` : ''}
+    </div>
+`;
 
             container.appendChild(col);
         });
@@ -707,7 +683,7 @@ class TimeGeometryDashboard {
                 })
                 .map(gann => ({
                     x: new Date(gann.date),
-                    y: 85, // Fixed intensity for standalone Gann dates
+                    y: 85, // Intensity for standalone Gann dates
                     type: 'gann',
                     gann: gann,
                     period: gann.type ? gann.type.replace('D_ANNIVERSARY', 'D') : 'Gann'

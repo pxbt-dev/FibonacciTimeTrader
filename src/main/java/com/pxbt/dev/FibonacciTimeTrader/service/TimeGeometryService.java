@@ -163,10 +163,10 @@ public class TimeGeometryService {
         double highPrice = cycleHigh.getPrice();
         double lowPrice = cycleLow.getPrice();
 
-        // Add retracement levels
+        // retracement levels
         allLevels.addAll(generateRetracementLevels(highPrice, lowPrice));
 
-        // Add extension levels
+        // extension levels
         allLevels.addAll(generateExtensionLevels(highPrice, lowPrice));
 
         // Sort by price (highest to lowest for display)
@@ -192,11 +192,11 @@ public class TimeGeometryService {
         String[] labels = {
                 "Cycle High (0%)",
                 "Fib 0.236 (23.6%)",
-                "Harmonic 0.333 (33.3%)",  // Added
+                "Harmonic 0.333 (33.3%)",
                 "Fib 0.382 (38.2%)",
                 "Fib 0.500 (50.0%)",
                 "Fib 0.618 (61.8%)",
-                "Harmonic 0.667 (66.7%)",  // Added
+                "Harmonic 0.667 (66.7%)",
                 "Fib 0.786 (78.6%)",
                 "Cycle Low (100%)"
         };
@@ -230,25 +230,25 @@ public class TimeGeometryService {
         };
         String[] labels = {
                 "Fib 1.272 (27.2% ext)",
-                "Harmonic 1.333 (33.3% ext)",  // Added
+                "Harmonic 1.333 (33.3% ext)",
                 "Fib 1.382 (38.2% ext)",
-                "Geometric 1.500 (50.0% ext)",  // Added
+                "Geometric 1.500 (50.0% ext)",
                 "Fib 1.618 (61.8% ext)",
-                "Harmonic 1.667 (66.7% ext)",  // Added
+                "Harmonic 1.667 (66.7% ext)",
                 "Double 2.000 (100% ext)",
-                "Harmonic 2.333 (133% ext)",   // Added
-                "Geometric 2.500 (150% ext)",  // Added
+                "Harmonic 2.333 (133% ext)",
+                "Geometric 2.500 (150% ext)",
                 "Fib 2.618 (161.8% ext)",
-                "Harmonic 2.667 (167% ext)",   // Added
+                "Harmonic 2.667 (167% ext)",
                 "Triple 3.000 (200% ext)",
-                "Harmonic 3.333 (233% ext)",   // Added
-                "Geometric 3.500 (250% ext)",  // Added
+                "Harmonic 3.333 (233% ext)",
+                "Geometric 3.500 (250% ext)",
                 "Fib 3.618 (261.8% ext)",
-                "Harmonic 3.667 (267% ext)",   // Added
+                "Harmonic 3.667 (267% ext)",
                 "Quadruple 4.000 (300% ext)",
                 "Fib 4.236 (323.6% ext)",
-                "Harmonic 4.333 (333% ext)",   // Added
-                "Geometric 4.500 (350% ext)"   // Added
+                "Harmonic 4.333 (333% ext)",
+                "Geometric 4.500 (350% ext)"
         };
 
         for (int i = 0; i < extensions.length; i++) {
