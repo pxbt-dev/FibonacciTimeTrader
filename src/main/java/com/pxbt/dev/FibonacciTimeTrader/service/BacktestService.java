@@ -91,19 +91,26 @@ public class BacktestService {
      * Test Fibonacci projections - FIXED to calculate real sample sizes
      */
     public FibonacciPerformance backtestFibonacciProjections(String symbol) {
-        log.info("🔬 Backtesting Fibonacci projections for {}", symbol);
+        log.info("🔬 Backtesting Fibonacci & Harmonic projections for {}", symbol);
 
         List<BinanceHistoricalService.OHLCData> historicalData = binanceHistoricalService.getHistoricalData(symbol);
 
-        if (historicalData == null || historicalData.size() < 500) { // Increased for longer projections
-            log.warn("Insufficient data for Fibonacci backtest: {} points",
+        if (historicalData == null || historicalData.size() < 500) {
+            log.warn("Insufficient data for backtest: {} points",
                     historicalData != null ? historicalData.size() : 0);
             return createEmptyFibonacciPerformance(symbol);
         }
 
         // Use DOUBLE for ratios, store results keyed by ratio
         Map<Double, List<Double>> fibResults = new HashMap<>();
-        double[] fibRatios = {0.382, 0.500, 0.618, 0.786, 1.000, 1.272, 1.618, 2.618};
+
+        // Updated to include Harmonic/Geometric ratios
+        double[] fibRatios = {
+                // Fibonacci ratios
+                0.382, 0.500, 0.618, 0.786, 1.000, 1.272, 1.618, 2.618,
+                // Harmonic/Geometric ratios
+                0.333, 0.667, 1.333, 1.500, 1.667, 2.000, 2.333, 2.500, 2.667, 3.000
+        };
 
         for (double ratio : fibRatios) {
             fibResults.put(ratio, new ArrayList<>());
@@ -112,9 +119,9 @@ public class BacktestService {
         // Base period in days
         int basePeriod = 100; // 100 days = 1.0 ratio
 
-        // Test each Fibonacci ratio
+        // Test each ratio
         for (int i = 0; i < historicalData.size() - (basePeriod * 3); i++) {
-            // Need room for longest projection (2.618 * 100 = 262 days)
+            // Need room for longest projection (3.0 * 100 = 300 days)
             double priceAtStart = historicalData.get(i).close();
 
             for (double ratio : fibRatios) {
@@ -133,7 +140,7 @@ public class BacktestService {
         FibonacciPerformance performance = new FibonacciPerformance();
         performance.setSymbol(symbol);
 
-        // Calculate statistics for each Fibonacci ratio
+        // Calculate statistics for each ratio
         Map<Double, FibStats> stats = new HashMap<>();
         for (double ratio : fibRatios) {
             List<Double> changes = fibResults.get(ratio);
@@ -142,8 +149,17 @@ public class BacktestService {
                 stats.put(ratio, fibStats);
 
                 int days = (int) Math.round(basePeriod * ratio);
-                log.info("Fibonacci {} ({} days): {} samples, {:.1f}% success, {:.1f}% avg return",
-                        String.format("%.3f", ratio), days, changes.size(),
+                String ratioType =
+                        isRatio(ratio, 0.333) || isRatio(ratio, 0.667) ||
+                                isRatio(ratio, 1.333) || isRatio(ratio, 1.667) ||
+                                isRatio(ratio, 2.333) || isRatio(ratio, 2.667) ||
+                                isRatio(ratio, 3.333) || isRatio(ratio, 3.667) ? "Harmonic" :
+                                isRatio(ratio, 1.5) || isRatio(ratio, 2.5) || isRatio(ratio, 3.5) ? "Geometric" :
+                                        isRatio(ratio, 2.0) ? "Double" :
+                                                isRatio(ratio, 3.0) ? "Triple" : "Fibonacci";
+
+                log.info("{} {} ({} days): {} samples, {} success, {}% avg return",
+                        ratioType, String.format("%.3f", ratio), days, changes.size(),
                         fibStats.getSuccessRate(), fibStats.getAverageChange());
             }
         }
@@ -246,7 +262,7 @@ public class BacktestService {
                         .count() * 100.0 / changes.size();
                 successRates.put(period, successRate);
 
-                log.info("Gann {} days: {} samples, {:.1f}% success, {:.1f}% avg return",
+                log.info("Gann {} days: {} samples, {}% success, {}% avg return",
                         period, changes.size(), successRate, avgReturn);
             }
         }
@@ -538,5 +554,9 @@ public class BacktestService {
     public static class VortexPerformance {
         private String symbol;
         private String message;
+    }
+
+    private boolean isRatio(double value, double target) {
+        return Math.abs(value - target) < 0.001;
     }
 }

@@ -229,6 +229,44 @@ class TimeGeometryDashboard {
         const supportLevels = priceLevels.filter(level => level.type === 'SUPPORT');
         const resistanceLevels = priceLevels.filter(level => level.type === 'RESISTANCE');
 
+        // Helper function to determine ratio type class
+        const getRatioClass = (ratio) => {
+            // Use tolerance for floating point comparison
+            const isApprox = (a, b) => Math.abs(a - b) < 0.001;
+
+            if (isApprox(ratio, 0.333) || isApprox(ratio, 0.667) ||
+                isApprox(ratio, 1.333) || isApprox(ratio, 1.667) ||
+                isApprox(ratio, 2.333) || isApprox(ratio, 2.667) ||
+                isApprox(ratio, 3.333) || isApprox(ratio, 3.667) ||
+                isApprox(ratio, 4.333)) {
+                return 'harmonic';
+            } else if (isApprox(ratio, 1.5) || isApprox(ratio, 2.5) ||
+                isApprox(ratio, 3.5) || isApprox(ratio, 4.5)) {
+                return 'geometric';
+            } else if (isApprox(ratio, 2.0)) {
+                return 'double';
+            } else if (isApprox(ratio, 3.0)) {
+                return 'triple';
+            } else if (isApprox(ratio, 4.0)) {
+                return 'quadruple';
+            } else {
+                return 'fibonacci';
+            }
+        };
+
+        // Helper function to determine badge class based on ratio type
+        const getRatioBadgeClass = (ratio) => {
+            const ratioClass = getRatioClass(ratio);
+            switch(ratioClass) {
+                case 'harmonic': return 'badge-harmonic';
+                case 'geometric': return 'badge-geometric';
+                case 'double': return 'badge-double';
+                case 'triple': return 'badge-triple';
+                case 'quadruple': return 'badge-quadruple';
+                default: return 'bg-secondary';
+            }
+        };
+
         // Render resistance levels (LEFT COLUMN)
         if (resistanceLevels.length > 0) {
             // Sort resistance by price (lowest to highest)
@@ -236,30 +274,42 @@ class TimeGeometryDashboard {
 
             resistanceContainer.innerHTML = resistanceLevels.map(level => {
                 const formattedPrice = `$${this.formatPrice(level.price)}`;
-                const isKeyLevel = level.ratio === 1.618 || level.ratio === 2.618;
+                const ratioClass = getRatioClass(level.ratio);
+                const badgeClass = getRatioBadgeClass(level.ratio);
+                const isKeyLevel = level.ratio === 1.618 || level.ratio === 2.618 ||
+                    level.ratio === 2.0 || level.ratio === 3.0;
+
+                // Get ratio type label
+                const ratioTypeLabel = ratioClass === 'harmonic' ? 'Harmonic' :
+                    ratioClass === 'geometric' ? 'Geometric' :
+                        ratioClass === 'double' ? 'Double' :
+                            ratioClass === 'triple' ? 'Triple' :
+                                ratioClass === 'quadruple' ? 'Quadruple' : 'Fibonacci';
 
                 return `
-                <div class="date-card ${isKeyLevel ? 'key-level border-success' : 'border-success'}">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div>
-                            <span class="badge ${isKeyLevel ? 'bg-success' : 'bg-success'}">
-                                ${level.label}
-                            </span>
-                            ${isKeyLevel ? '<span class="badge bg-warning ms-1">Key</span>' : ''}
-                        </div>
-                        <div class="h5 mb-0 text-success">
-                            ${formattedPrice}
-                        </div>
+            <div class="date-card ${ratioClass} ${isKeyLevel ? 'key-level' : ''}">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div>
+                        <span class="badge ${badgeClass}">
+                            ${ratioTypeLabel}: ${level.ratio.toFixed(3)}
+                        </span>
+                        ${isKeyLevel ? '<span class="badge bg-warning ms-1">Key</span>' : ''}
                     </div>
-                    <div class="description">
-                        <i class="fas fa-arrow-up me-1 text-success"></i>
-                        ${level.distanceFromHigh} above cycle high
-                        <div class="mt-1 small">
-                            <span class="badge bg-secondary">Ratio: ${level.ratio.toFixed(3)}</span>
-                        </div>
+                    <div class="h5 mb-0 text-success">
+                        ${formattedPrice}
                     </div>
                 </div>
-                `;
+                <div class="description">
+                    <i class="fas fa-arrow-up me-1 text-success"></i>
+                    ${level.distanceFromHigh} above cycle high
+                    <div class="mt-1 small">
+                        <span class="badge ${badgeClass}">
+                            ${level.label}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            `;
             }).join('');
         } else {
             resistanceContainer.innerHTML = '<div class="alert alert-info">No resistance levels available</div>';
@@ -272,39 +322,48 @@ class TimeGeometryDashboard {
 
             supportContainer.innerHTML = supportLevels.map(level => {
                 const formattedPrice = `$${this.formatPrice(level.price)}`;
-                const isKeyLevel = level.ratio === 0.618 || level.ratio === 0.786;
+                const ratioClass = getRatioClass(level.ratio);
+                const badgeClass = getRatioBadgeClass(level.ratio);
+                const isKeyLevel = level.ratio === 0.618 || level.ratio === 0.786 ||
+                    level.ratio === 0.333 || level.ratio === 0.667 ||
+                    level.ratio === 0.5;
+
+                // Get ratio type label
+                const ratioTypeLabel = ratioClass === 'harmonic' ? 'Harmonic' :
+                    ratioClass === 'geometric' ? 'Geometric' : 'Fibonacci';
 
                 return `
-                <div class="date-card ${isKeyLevel ? 'key-level border-danger' : 'border-danger'}">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div>
-                            <span class="badge ${isKeyLevel ? 'bg-danger' : 'bg-danger'}">
-                                ${level.label}
-                            </span>
-                            ${isKeyLevel ? '<span class="badge bg-info ms-1">Key</span>' : ''}
-                        </div>
-                        <div class="h5 mb-0 text-danger">
-                            ${formattedPrice}
-                        </div>
+            <div class="date-card ${ratioClass} ${isKeyLevel ? 'key-level' : ''}">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div>
+                        <span class="badge ${badgeClass}">
+                            ${ratioTypeLabel}: ${level.ratio.toFixed(3)}
+                        </span>
+                        ${isKeyLevel ? '<span class="badge bg-info ms-1">Key</span>' : ''}
+                        ${level.ratio === 0 ? '<span class="badge bg-dark ms-1">Cycle High</span>' : ''}
+                        ${level.ratio === 1.0 ? '<span class="badge bg-dark ms-1">Cycle Low</span>' : ''}
                     </div>
-                    <div class="description">
-                        <i class="fas fa-arrow-down me-1 text-danger"></i>
-                        ${level.distanceFromHigh} from cycle high
-                        <div class="mt-1 small">
-                            <span class="badge bg-secondary">Ratio: ${level.ratio.toFixed(3)}</span>
-                            ${level.ratio === 0 ? '<span class="badge bg-dark ms-1">Cycle High</span>' : ''}
-                            ${level.ratio === 1.0 ? '<span class="badge bg-dark ms-1">Cycle Low</span>' : ''}
-                        </div>
+                    <div class="h5 mb-0 text-danger">
+                        ${formattedPrice}
                     </div>
                 </div>
-                `;
+                <div class="description">
+                    <i class="fas fa-arrow-down me-1 text-danger"></i>
+                    ${level.distanceFromHigh} from cycle high
+                    <div class="mt-1 small">
+                        <span class="badge ${badgeClass}">
+                            ${level.label}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            `;
             }).join('');
         } else {
             supportContainer.innerHTML = '<div class="alert alert-info">No support levels available</div>';
         }
     }
 
-    // FIXED: Enhanced alignment dates rendering with expandable details
     renderAlignmentDates(alignmentDates) {
         const container = document.getElementById('upcomingDates');
         if (!container) return;
@@ -851,16 +910,16 @@ class TimeGeometryDashboard {
         }
     }
 
-    // Render solar dashboard
+    // Render solar dashboard with dark theme
     renderSolarDashboard() {
         const container = document.getElementById('solarDashboard');
         if (!container || !this.solarData) {
             container.innerHTML = `
-                <div class="alert alert-warning">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    Solar data not available
-                </div>
-            `;
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Solar data not available
+            </div>
+        `;
             return;
         }
 
@@ -869,91 +928,91 @@ class TimeGeometryDashboard {
         const issueDate = this.solarData.issueDate || 'Unknown';
 
         container.innerHTML = `
-            <div class="row mb-4">
-                <div class="col-md-4 mb-3">
-                    <div class="card ${currentAp >= 12 ? 'border-warning' : 'border-success'}">
-                        <div class="card-body text-center">
-                            <div class="display-4 fw-bold">${currentAp}</div>
-                            <div class="text-uppercase small">Current AP Index</div>
-                            <div class="mt-2">
-                                <span class="badge ${currentAp >= 12 ? 'bg-warning' : 'bg-success'}">
-                                    ${currentAp >= 12 ? 'Elevated' : 'Normal'}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-md-4 mb-3">
-                    <div class="card border-info">
-                        <div class="card-body text-center">
-                            <div class="display-4 fw-bold">${highApDays.length}</div>
-                            <div class="text-uppercase small">High AP Days (≥12)</div>
-                            <div class="mt-2">
-                                <span class="badge ${highApDays.length > 0 ? 'bg-warning' : 'bg-success'}">
-                                    ${highApDays.length > 0 ? 'Active Period' : 'Quiet'}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-md-4 mb-3">
-                    <div class="card bg-dark text-white">
-                        <div class="card-body text-center">
-                            <div class="h2 mb-2">
-                                <i class="fas fa-satellite"></i>
-                            </div>
-                            <div class="text-uppercase small">Forecast Source</div>
-                            <div class="mt-2 small">
-                                NOAA 45-day<br>${issueDate}
-                            </div>
+        <div class="row mb-4">
+            <div class="col-md-4 mb-3">
+                <div class="card bg-dark border-${currentAp >= 12 ? 'warning' : 'success'}">
+                    <div class="card-body text-center">
+                        <div class="display-4 fw-bold text-${currentAp >= 12 ? 'warning' : 'success'}">${currentAp}</div>
+                        <div class="text-uppercase small text-muted">Current AP Index</div>
+                        <div class="mt-2">
+                            <span class="badge ${currentAp >= 12 ? 'bg-warning' : 'bg-success'}">
+                                ${currentAp >= 12 ? 'Elevated' : 'Normal'}
+                            </span>
                         </div>
                     </div>
                 </div>
             </div>
             
-            ${highApDays.length > 0 ? `
-                <div class="alert ${highApDays.length > 5 ? 'alert-warning' : 'alert-info'}">
-                    <i class="fas ${highApDays.length > 5 ? 'fa-exclamation-triangle' : 'fa-info-circle'} me-2"></i>
-                    <strong>${highApDays.length} days with AP ≥ 12 detected</strong>
-                    <div class="mt-2 small">
-                        Next high AP day: ${this.formatDate(highApDays[0]?.date)} (${this.daysFromNow(highApDays[0]?.date)})
+            <div class="col-md-4 mb-3">
+                <div class="card bg-dark border-info">
+                    <div class="card-body text-center">
+                        <div class="display-4 fw-bold text-info">${highApDays.length}</div>
+                        <div class="text-uppercase small text-muted">High AP Days (≥12)</div>
+                        <div class="mt-2">
+                            <span class="badge ${highApDays.length > 0 ? 'bg-warning' : 'bg-success'}">
+                                ${highApDays.length > 0 ? 'Active Period' : 'Quiet'}
+                            </span>
+                        </div>
                     </div>
                 </div>
-                
-                <div class="mt-4">
-                    <h5><i class="fas fa-list me-2"></i>High AP Dates (AP ≥ 12)</h5>
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
+            </div>
+            
+            <div class="col-md-4 mb-3">
+                <div class="card bg-dark border-secondary text-white">
+                    <div class="card-body text-center">
+                        <div class="h2 mb-2 text-info">
+                            <i class="fas fa-satellite"></i>
+                        </div>
+                        <div class="text-uppercase small text-muted">Forecast Source</div>
+                        <div class="mt-2 small">
+                            NOAA 45-day<br>${issueDate}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        ${highApDays.length > 0 ? `
+            <div class="alert ${highApDays.length > 5 ? 'alert-warning' : 'alert-info'}">
+                <i class="fas ${highApDays.length > 5 ? 'fa-exclamation-triangle' : 'fa-info-circle'} me-2"></i>
+                <strong>${highApDays.length} days with AP ≥ 12 detected</strong>
+                <div class="mt-2 small">
+                    Next high AP day: ${this.formatDate(highApDays[0]?.date)} (${this.daysFromNow(highApDays[0]?.date)})
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <h5><i class="fas fa-list me-2"></i>High AP Dates (AP ≥ 12)</h5>
+                <div class="table-responsive">
+                    <table class="table table-dark table-sm">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>AP Index</th>
+                                <th>Days From Now</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${highApDays.slice(0, 10).map(day => `
                                 <tr>
-                                    <th>Date</th>
-                                    <th>AP Index</th>
-                                    <th>Days From Now</th>
+                                    <td>${this.formatDate(day.date)}</td>
+                                    <td><span class="badge ${day.ap >= 20 ? 'bg-danger' : 'bg-warning'}">${day.ap}</span></td>
+                                    <td>${this.daysFromNow(day.date)}</td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                ${highApDays.slice(0, 10).map(day => `
-                                    <tr>
-                                        <td>${this.formatDate(day.date)}</td>
-                                        <td><span class="badge ${day.ap >= 20 ? 'bg-danger' : 'bg-warning'}">${day.ap}</span></td>
-                                        <td>${this.daysFromNow(day.date)}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                    ${highApDays.length > 10 ? `<div class="text-center small text-muted mt-2">+ ${highApDays.length - 10} more days</div>` : ''}
+                            `).join('')}
+                        </tbody>
+                    </table>
                 </div>
-            ` : `
-                <div class="alert alert-success">
-                    <i class="fas fa-check-circle me-2"></i>
-                    <strong>Quiet geomagnetic period</strong>
-                    <div class="mt-1 small">No days with AP ≥ 12 in the forecast</div>
-                </div>
-            `}
-        `;
+                ${highApDays.length > 10 ? `<div class="text-center small text-muted mt-2">+ ${highApDays.length - 10} more days</div>` : ''}
+            </div>
+        ` : `
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle me-2"></i>
+                <strong>Quiet geomagnetic period</strong>
+                <div class="mt-1 small">No days with AP ≥ 12 in the forecast</div>
+            </div>
+        `}
+    `;
     }
 
     // Helper methods
@@ -1003,7 +1062,42 @@ class TimeGeometryDashboard {
     }
 
     getFibRatioLabel(ratio, days) {
+        console.log(`🔍 getFibRatioLabel called with: ratio=${ratio}, days=${days}`);
+
+        // Apply rounding corrections
+        const roundingCorrections = {
+            79: 0.786,
+            62: 0.618,
+            38: 0.382,
+            50: 0.500,
+            127: 1.272,
+            162: 1.618,
+            262: 2.618,
+            33: 0.333,    // Harmonic 1/3
+            67: 0.667,    // Harmonic 2/3
+            133: 1.333,   // Harmonic 1.333
+            150: 1.500,   // Geometric 1.5
+            167: 1.667,   // Harmonic 1.667
+            200: 2.000,   // Double
+            233: 2.333,   // Harmonic 2.333
+            250: 2.500,   // Geometric 2.5
+            267: 2.667,   // Harmonic 2.667
+            300: 3.000    // Triple
+        };
+
+        // Apply correction if days match a known rounding case
+        if (roundingCorrections[days]) {
+            const correctRatio = roundingCorrections[days];
+            const ratioDiff = Math.abs(ratio - correctRatio);
+            if (ratioDiff > 0.002) {
+                console.log(`🔄 Correcting: ${ratio.toFixed(3)} (${days}d) → ${correctRatio}`);
+                ratio = correctRatio;
+            }
+        }
+
+        // RATIO MAPPING with Harmonic/Geometric labels
         const ratioMap = {
+            // Fibonacci
             0.382: 'Fib 0.382',
             0.500: 'Fib 0.500',
             0.618: 'Fib 0.618',
@@ -1011,18 +1105,50 @@ class TimeGeometryDashboard {
             1.000: 'Fib 1.000',
             1.272: 'Fib 1.272',
             1.618: 'Fib 1.618',
-            2.618: 'Fib 2.618'
+            2.618: 'Fib 2.618',
+
+            // Harmonic/Geometric
+            0.333: 'Harmonic 0.333',
+            0.667: 'Harmonic 0.667',
+            1.333: 'Harmonic 1.333',
+            1.500: 'Geometric 1.500',
+            1.667: 'Harmonic 1.667',
+            2.000: 'Double 2.000',
+            2.333: 'Harmonic 2.333',
+            2.500: 'Geometric 2.500',
+            2.667: 'Harmonic 2.667',
+            3.000: 'Triple 3.000',
+            3.333: 'Harmonic 3.333',
+            3.500: 'Geometric 3.500',
+            3.667: 'Harmonic 3.667',
+            4.000: 'Quadruple 4.000',
+            4.236: 'Fib 4.236',
+            4.333: 'Harmonic 4.333',
+            4.500: 'Geometric 4.500'
         };
 
         const roundedRatio = Math.round(ratio * 1000) / 1000;
 
+        // Check exact matches
+        if (ratioMap[roundedRatio]) {
+            return ratioMap[roundedRatio];
+        }
+
+        // Check close matches
         for (const [key, label] of Object.entries(ratioMap)) {
             if (Math.abs(roundedRatio - parseFloat(key)) < 0.001) {
                 return label;
             }
         }
 
-        return `Fib ${roundedRatio.toFixed(3)}`;
+        // Fallback - determine type
+        if (Math.abs(ratio % (1/3)) < 0.001) {
+            return `Harmonic ${roundedRatio.toFixed(3)}`;
+        } else if (Math.abs(ratio % 0.5) < 0.001) {
+            return `Geometric ${roundedRatio.toFixed(3)}`;
+        } else {
+            return `Fib ${roundedRatio.toFixed(3)}`;
+        }
     }
 
     formatDate(dateString) {

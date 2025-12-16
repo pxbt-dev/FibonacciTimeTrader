@@ -92,18 +92,28 @@ public class TimeGeometryService {
         log.info("🔮 Generating time projections from cycle high: {} at ${}",
                 cycleHigh.getDate(), cycleHigh.getPrice());
 
-        // Time ratios (days)
-        Map<Double, String> timeMap = Map.of(
-                0.236, "24 days",
-                0.382, "38 days",
-                0.500, "50 days",
-                0.618, "62 days",
-                0.786, "79 days",
-                1.000, "100 days",
-                1.272, "127 days",
-                1.618, "162 days",
-                2.618, "262 days"
-        );
+        // Time ratios (days) - Now includes Harmonic/Geometric levels
+        Map<Double, String> timeMap = new LinkedHashMap<>(); // LinkedHashMap maintains insertion order
+        timeMap.put(0.236, "24 days");
+        timeMap.put(0.382, "38 days");
+        timeMap.put(0.500, "50 days");
+        timeMap.put(0.618, "62 days");
+        timeMap.put(0.786, "79 days");
+        timeMap.put(1.000, "100 days");
+        timeMap.put(1.272, "127 days");
+        timeMap.put(1.618, "162 days");
+        timeMap.put(2.618, "262 days");
+        // Harmonic/Geometric ratios (1/3 series)
+        timeMap.put(0.333, "33 days (Harmonic 1/3)");
+        timeMap.put(0.667, "67 days (Harmonic 2/3)");
+        timeMap.put(1.333, "133 days (Harmonic 1.333)");
+        timeMap.put(1.500, "150 days (Geometric 1.5)");
+        timeMap.put(1.667, "167 days (Harmonic 1.667)");
+        timeMap.put(2.000, "200 days (Double)");
+        timeMap.put(2.333, "233 days (Harmonic 2.333)");
+        timeMap.put(2.500, "250 days (Geometric 2.5)");
+        timeMap.put(2.667, "267 days (Harmonic 2.667)");
+        timeMap.put(3.000, "300 days (Triple)");
 
         for (Map.Entry<Double, String> entry : timeMap.entrySet()) {
             double ratio = entry.getKey();
@@ -119,16 +129,23 @@ public class TimeGeometryService {
             projection.setFibonacciNumber(days);
             projection.setFibonacciRatio(ratio);
             projection.setSourcePivot(cycleHigh);
-            projection.setIntensity(calculateFibIntensity(ratio));
+
+            // Set intensity based on ratio type
+            double intensity = calculateFibIntensity(ratio);
+            if (ratio == 0.333 || ratio == 0.667) {
+                intensity = 0.75; // Higher intensity for key harmonic levels
+            }
+
+            projection.setIntensity(intensity);
             projection.setType("TIME_PROJECTION");
             projection.setPriceTarget(0);
 
-            projection.setDescription(String.format("Fib %.3f Time Cycle: %s from %s high",
-                    ratio, daysLabel, cycleHigh.getDate()));
+            projection.setDescription(String.format("%s: %s from %s high",
+                    ratio == 0.333 || ratio == 0.667 ? "Harmonic" :
+                            ratio == 1.5 || ratio == 2.5 ? "Geometric" : "Fib",
+                    daysLabel, cycleHigh.getDate()));
 
             projections.add(projection);
-
-            log.info("🔮 Created projection: {} days ({}) → {}", days, ratio, date);
         }
 
         log.info("🔮 Generated {} time projections", projections.size());
@@ -170,14 +187,16 @@ public class TimeGeometryService {
         List<FibonacciPriceLevel> levels = new ArrayList<>();
         double range = highPrice - lowPrice;
 
-        // Standard Fibonacci retracement levels
-        double[] retracements = {0.000, 0.236, 0.382, 0.500, 0.618, 0.786, 1.000};
+        // Standard Fibonacci retracement levels plus Harmonic levels
+        double[] retracements = {0.000, 0.236, 0.333, 0.382, 0.500, 0.618, 0.667, 0.786, 1.000};
         String[] labels = {
                 "Cycle High (0%)",
                 "Fib 0.236 (23.6%)",
+                "Harmonic 0.333 (33.3%)",  // Added
                 "Fib 0.382 (38.2%)",
                 "Fib 0.500 (50.0%)",
                 "Fib 0.618 (61.8%)",
+                "Harmonic 0.667 (66.7%)",  // Added
                 "Fib 0.786 (78.6%)",
                 "Cycle Low (100%)"
         };
@@ -202,18 +221,34 @@ public class TimeGeometryService {
         List<FibonacciPriceLevel> levels = new ArrayList<>();
         double range = highPrice - lowPrice;
 
-        // Fibonacci extension levels
-        double[] extensions = {1.272, 1.382, 1.500, 1.618, 2.000, 2.618, 3.000, 3.618, 4.236};
+        // Fibonacci extension levels plus Harmonic/Geometric extensions
+        double[] extensions = {
+                1.272, 1.333, 1.382, 1.500, 1.618, 1.667,
+                2.000, 2.333, 2.500, 2.618, 2.667,
+                3.000, 3.333, 3.500, 3.618, 3.667,
+                4.000, 4.236, 4.333, 4.500
+        };
         String[] labels = {
                 "Fib 1.272 (27.2% ext)",
+                "Harmonic 1.333 (33.3% ext)",  // Added
                 "Fib 1.382 (38.2% ext)",
-                "Fib 1.500 (50.0% ext)",
+                "Geometric 1.500 (50.0% ext)",  // Added
                 "Fib 1.618 (61.8% ext)",
-                "Fib 2.000 (100% ext)",
+                "Harmonic 1.667 (66.7% ext)",  // Added
+                "Double 2.000 (100% ext)",
+                "Harmonic 2.333 (133% ext)",   // Added
+                "Geometric 2.500 (150% ext)",  // Added
                 "Fib 2.618 (161.8% ext)",
-                "Fib 3.000 (200% ext)",
+                "Harmonic 2.667 (167% ext)",   // Added
+                "Triple 3.000 (200% ext)",
+                "Harmonic 3.333 (233% ext)",   // Added
+                "Geometric 3.500 (250% ext)",  // Added
                 "Fib 3.618 (261.8% ext)",
-                "Fib 4.236 (323.6% ext)"
+                "Harmonic 3.667 (267% ext)",   // Added
+                "Quadruple 4.000 (300% ext)",
+                "Fib 4.236 (323.6% ext)",
+                "Harmonic 4.333 (333% ext)",   // Added
+                "Geometric 4.500 (350% ext)"   // Added
         };
 
         for (int i = 0; i < extensions.length; i++) {
@@ -461,10 +496,20 @@ public class TimeGeometryService {
      * Calculate Fibonacci intensity based on ratio importance
      */
     private double calculateFibIntensity(double ratio) {
+        // Key Fibonacci levels
         if (ratio == 0.618 || ratio == 1.618) return 0.9;
         if (ratio == 0.382 || ratio == 0.786) return 0.7;
         if (ratio == 0.500) return 0.8;
         if (ratio == 1.272 || ratio == 2.618) return 0.6;
+
+        // Key Harmonic/Geometric levels
+        if (ratio == 0.333 || ratio == 0.667) return 0.75;
+        if (ratio == 1.333 || ratio == 1.667) return 0.65;
+        if (ratio == 1.5 || ratio == 2.5 || ratio == 3.5) return 0.7;
+        if (ratio == 2.333 || ratio == 2.667) return 0.6;
+        if (ratio == 2.0) return 0.8;
+        if (ratio == 3.0) return 0.7;
+
         return 0.5;
     }
 
