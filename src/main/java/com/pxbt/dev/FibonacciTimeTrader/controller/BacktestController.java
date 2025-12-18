@@ -106,7 +106,7 @@ public class BacktestController {
             Map<String, Object> results = new HashMap<>();
             results.put("fibonacci", backtestService.backtestFibonacciProjections(symbol));
             results.put("gann", backtestService.backtestGannAnniversaries(symbol));
-            results.put("vortex", backtestService.backtestVortexWindows(symbol));
+            results.put("vortex", backtestService.backtestConfluenceWindows(symbol));
             return ResponseEntity.ok(results);
         } catch (Exception e) {
             return ResponseEntity.status(500)

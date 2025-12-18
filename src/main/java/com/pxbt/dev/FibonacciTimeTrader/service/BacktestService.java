@@ -1,5 +1,6 @@
 package com.pxbt.dev.FibonacciTimeTrader.service;
 
+import com.pxbt.dev.FibonacciTimeTrader.model.PricePivot;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,73 +19,6 @@ public class BacktestService {
                            BinanceHistoricalService binanceHistoricalService) {
         this.timeGeometryService = timeGeometryService;
         this.binanceHistoricalService = binanceHistoricalService;
-    }
-
-    /**
-     * Comprehensive backtest of all time geometry signals
-     */
-    public BacktestResult backtestSymbol(String symbol, LocalDate startDate, LocalDate endDate) {
-        log.info("🔬 Starting backtest for {} from {} to {}", symbol, startDate, endDate);
-
-        List<BinanceHistoricalService.OHLCData> historicalData = binanceHistoricalService.getHistoricalData(symbol);
-
-        BacktestResult result = new BacktestResult();
-        result.setSymbol(symbol);
-        result.setTestPeriod(startDate + " to " + endDate);
-
-        // Track all signals and their outcomes
-        List<SignalOutcome> signalOutcomes = new ArrayList<>();
-
-        // Simulate running time geometry at historical dates
-        for (BinanceHistoricalService.OHLCData data : historicalData) {
-            LocalDate currentDate = toLocalDate(data.timestamp());
-
-            if (!currentDate.isBefore(startDate) && !currentDate.isAfter(endDate)) {
-                // Run time geometry analysis for this date
-                signalOutcomes.addAll(analyzeDateOutcomes(currentDate, historicalData));
-            }
-        }
-
-        // Analyze results
-        result.setTotalSignals(signalOutcomes.size());
-        result.setSignalOutcomes(signalOutcomes);
-        result.calculateStatistics();
-
-        log.info("✅ Backtest complete: {} signals analyzed", signalOutcomes.size());
-        return result;
-    }
-
-    /**
-     * Test specific signal types
-     */
-    public SignalPerformance backtestSignalType(String symbol, String signalType) {
-        log.info("🔬 Backtesting {} signals for {}", signalType, symbol);
-
-        List<BinanceHistoricalService.OHLCData> historicalData = binanceHistoricalService.getHistoricalData(symbol);
-        List<SignalOutcome> outcomes = new ArrayList<>();
-
-        for (int i = 0; i < historicalData.size() - 100; i++) { // Leave room for future outcomes
-            LocalDate signalDate = toLocalDate(historicalData.get(i).timestamp());
-
-            // Get actual price movement after signal date
-            double priceAtSignal = historicalData.get(i).close();
-            double priceAfter7Days = getPriceAfterDays(historicalData, i, 7);
-            double priceAfter14Days = getPriceAfterDays(historicalData, i, 14);
-            double priceAfter30Days = getPriceAfterDays(historicalData, i, 30);
-
-            SignalOutcome outcome = new SignalOutcome();
-            outcome.setSignalDate(signalDate);
-            outcome.setSignalType(signalType);
-            outcome.setPriceAtSignal(priceAtSignal);
-            outcome.setPriceChange7Days(calculateChange(priceAtSignal, priceAfter7Days));
-            outcome.setPriceChange14Days(calculateChange(priceAtSignal, priceAfter14Days));
-            outcome.setPriceChange30Days(calculateChange(priceAtSignal, priceAfter30Days));
-            outcome.setWasSignificant(isSignificantMove(priceAtSignal, priceAfter7Days));
-
-            outcomes.add(outcome);
-        }
-
-        return analyzeSignalPerformance(signalType, outcomes);
     }
 
     /**
@@ -196,9 +130,10 @@ public class BacktestService {
      * Test Gann anniversary dates (90, 180, 360 days) - CORRECTED VERSION
      */
     public GannPerformance backtestGannAnniversaries(String symbol) {
-        log.info("🔬 Backtesting Gann anniversaries for {}", symbol);
+        log.info("🔬 BACKTESTING ALL GANN CYCLES for {}", symbol);
 
-        List<BinanceHistoricalService.OHLCData> historicalData = binanceHistoricalService.getHistoricalData(symbol);
+        List<BinanceHistoricalService.OHLCData> historicalData =
+                binanceHistoricalService.getHistoricalData(symbol);
 
         if (historicalData == null || historicalData.size() < 400) {
             log.warn("Insufficient data for Gann backtest: {} points",
@@ -206,26 +141,41 @@ public class BacktestService {
             return createEmptyGannPerformance(symbol);
         }
 
-        // 1. Find ACTUAL pivot points (not every day!)
-        List<LocalDate> pivotDates = findSignificantPivots(historicalData, 10);
-        log.info("Found {} significant pivot points since {}",
-                pivotDates.size(),
-                pivotDates.isEmpty() ? "N/A" : pivotDates.get(0));
+        // ✅ UPDATED: Test ALL your Gann cycles
+        int[] gannPeriods = {30, 45, 60, 90, 120, 135, 144, 180, 225, 270, 315, 360, 540, 720};
 
-        // 2. Test anniversaries from these pivots
+        // 1. Find ACTUAL pivot points from your TimeGeometryService logic
+        List<PricePivot> majorPivots = extractMajorPivotsFromService(symbol);
+
+        // If no major pivots from service, find them from historical data
+        if (majorPivots.isEmpty()) {
+            log.info("No major pivots from service, finding from historical data...");
+
+            // Step 1: Find pivot DATES (returns List<LocalDate>)
+            List<LocalDate> pivotDates = findSignificantPivots(historicalData, 20);
+
+            // Step 2: Convert dates to PricePivot objects (returns List<PricePivot>)
+            majorPivots = convertToPricePivots(historicalData, pivotDates);
+
+            log.info("Found {} pivot dates, converted to {} price pivots",
+                    pivotDates.size(), majorPivots.size());
+        }
+
+        log.info("Found {} significant pivot points since {}",
+                majorPivots.size(),
+                majorPivots.isEmpty() ? "N/A" : majorPivots.get(0).getDate());
+
+        // 2. Test each Gann period
         Map<Integer, List<Double>> results = new HashMap<>();
         Map<Integer, Integer> sampleSizes = new HashMap<>();
-
-        // Define Gann periods
-        int[] gannPeriods = {30, 45, 60, 90, 120, 135, 144, 180, 225, 270, 315, 360, 540, 720};
 
         for (int period : gannPeriods) {
             results.put(period, new ArrayList<>());
             sampleSizes.put(period, 0);
         }
 
-        for (LocalDate pivotDate : pivotDates) {
-            int pivotIndex = findDateIndex(historicalData, pivotDate);
+        for (PricePivot pivot : majorPivots) {
+            int pivotIndex = findDateIndex(historicalData, pivot.getDate());
 
             if (pivotIndex != -1) {
                 for (int period : gannPeriods) {
@@ -243,31 +193,65 @@ public class BacktestService {
             }
         }
 
-        // 3. Calculate REALISTIC statistics
+        // 3. Calculate statistics
         Map<Integer, Double> avgReturns = new HashMap<>();
         Map<Integer, Double> successRates = new HashMap<>();
+        Map<Integer, Double> avgPositiveReturns = new HashMap<>();
+        Map<Integer, Double> avgNegativeReturns = new HashMap<>();
 
         for (int period : gannPeriods) {
             List<Double> changes = results.get(period);
 
-            if (!changes.isEmpty()) {
+            if (!changes.isEmpty() && changes.size() >= 5) { // Minimum 5 samples
+                // Average return
                 double avgReturn = changes.stream()
                         .mapToDouble(Double::doubleValue)
                         .average()
                         .orElse(0.0);
                 avgReturns.put(period, avgReturn);
 
+                // Success rate (% of positive returns)
                 double successRate = changes.stream()
                         .filter(c -> c > 0)
                         .count() * 100.0 / changes.size();
                 successRates.put(period, successRate);
+
+                // Average positive returns only
+                double avgPositive = changes.stream()
+                        .filter(c -> c > 0)
+                        .mapToDouble(Double::doubleValue)
+                        .average()
+                        .orElse(0.0);
+                avgPositiveReturns.put(period, avgPositive);
+
+                // Average negative returns only
+                double avgNegative = changes.stream()
+                        .filter(c -> c < 0)
+                        .mapToDouble(Double::doubleValue)
+                        .average()
+                        .orElse(0.0);
+                avgNegativeReturns.put(period, avgNegative);
 
                 log.info("Gann {} days: {} samples, {}% success, {}% avg return",
                         period, changes.size(), successRate, avgReturn);
             }
         }
 
-        // 4. Build response
+        // 4. Rank cycles by performance
+        List<Map.Entry<Integer, Double>> rankedBySuccess = successRates.entrySet().stream()
+                .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
+                .limit(5)
+                .toList();
+
+        log.info("🏆 TOP 5 GANN CYCLES BY SUCCESS RATE for {}:", symbol);
+        for (int i = 0; i < rankedBySuccess.size(); i++) {
+            Map.Entry<Integer, Double> entry = rankedBySuccess.get(i);
+            log.info("   {}. {} days: {}% success ({} samples)",
+                    i + 1, entry.getKey(), entry.getValue(),
+                    sampleSizes.get(entry.getKey()));
+        }
+
+        // 5. Build response
         GannPerformance performance = new GannPerformance();
         performance.setSymbol(symbol);
         performance.setSampleSizes(sampleSizes);
@@ -279,9 +263,128 @@ public class BacktestService {
     }
 
     /**
+     * Extract major pivots using the SAME logic as TimeGeometryService
+     */
+    private List<PricePivot> extractMajorPivotsFromService(String symbol) {
+        try {
+            // Get monthly data
+            List<BinanceHistoricalService.OHLCData> monthlyData =
+                    binanceHistoricalService.getMonthlyData(symbol);
+
+            if (monthlyData == null || monthlyData.isEmpty()) {
+                return new ArrayList<>();
+            }
+
+            // Use the SAME logic as TimeGeometryService.getMajorCyclePivots()
+            List<PricePivot> pivots = new ArrayList<>();
+
+            // BTC specific
+            if (symbol.equals("BTC")) {
+                pivots.add(new PricePivot(LocalDate.of(2018, 12, 15), 3100.0, "MAJOR_LOW", 1.0));
+                pivots.add(new PricePivot(LocalDate.of(2023, 1, 1), 15455.0, "MAJOR_LOW", 0.9));
+                pivots.add(new PricePivot(LocalDate.of(2024, 3, 1), 72000.0, "MAJOR_HIGH", 0.8));
+                pivots.add(new PricePivot(LocalDate.of(2025, 10, 1), 126272.76, "MAJOR_HIGH", 1.0));
+                return pivots;
+            }
+
+            // For other symbols (we'll fix this next)
+            // Fallback: find highest and lowest
+            BinanceHistoricalService.OHLCData lowest = monthlyData.stream()
+                    .min(Comparator.comparingDouble(BinanceHistoricalService.OHLCData::low))
+                    .orElse(null);
+            BinanceHistoricalService.OHLCData highest = monthlyData.stream()
+                    .max(Comparator.comparingDouble(BinanceHistoricalService.OHLCData::high))
+                    .orElse(null);
+
+            if (lowest != null) {
+                pivots.add(new PricePivot(
+                        convertTimestampToDate(lowest.timestamp()),
+                        lowest.low(),
+                        "MAJOR_LOW",
+                        1.0
+                ));
+            }
+
+            if (highest != null) {
+                pivots.add(new PricePivot(
+                        convertTimestampToDate(highest.timestamp()),
+                        highest.high(),
+                        "MAJOR_HIGH",
+                        1.0
+                ));
+            }
+
+            return pivots;
+
+        } catch (Exception e) {
+            log.error("Failed to extract major pivots for {}: {}", symbol, e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Convert pivot dates to PricePivot objects
+     */
+    private List<PricePivot> convertToPricePivots(
+            List<BinanceHistoricalService.OHLCData> historicalData,
+            List<LocalDate> pivotDates) {
+
+        List<PricePivot> pricePivots = new ArrayList<>();
+
+        for (LocalDate pivotDate : pivotDates) {
+            // Find the data point for this date
+            for (BinanceHistoricalService.OHLCData data : historicalData) {
+                LocalDate dataDate = Instant.ofEpochMilli(data.timestamp())
+                        .atZone(ZoneId.systemDefault())
+                        .toLocalDate();
+
+                if (dataDate.equals(pivotDate)) {
+                    // Determine if it was a high or low pivot
+                    // Simple check: compare with neighbors
+                    int index = historicalData.indexOf(data);
+                    if (index > 0 && index < historicalData.size() - 1) {
+                        boolean isHigh = data.high() > historicalData.get(index - 1).high() &&
+                                data.high() > historicalData.get(index + 1).high();
+                        boolean isLow = data.low() < historicalData.get(index - 1).low() &&
+                                data.low() < historicalData.get(index + 1).low();
+
+                        if (isHigh) {
+                            pricePivots.add(new PricePivot(
+                                    pivotDate,
+                                    data.high(),
+                                    "HIGH",
+                                    0.8
+                            ));
+                        } else if (isLow) {
+                            pricePivots.add(new PricePivot(
+                                    pivotDate,
+                                    data.low(),
+                                    "LOW",
+                                    0.8
+                            ));
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        return pricePivots;
+    }
+
+    /**
+     * Helper to convert timestamp to LocalDate
+     */
+    private LocalDate convertTimestampToDate(long timestamp) {
+        return Instant.ofEpochMilli(timestamp)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate();
+    }
+
+    /**
      * Test Vortex Windows (multiple signal convergences)
      */
-    public VortexPerformance backtestVortexWindows(String symbol) {
+    public VortexPerformance backtestConfluenceWindows(String symbol) {
         log.info("🔬 Backtesting Vortex Windows for {}", symbol);
 
         // This would simulate vortex window detection and check outcomes
@@ -355,92 +458,8 @@ public class BacktestService {
         return -1;
     }
 
-    private List<SignalOutcome> analyzeDateOutcomes(LocalDate date, List<BinanceHistoricalService.OHLCData> historicalData) {
-        // Placeholder - would run actual time geometry for historical date
-        // Then check actual price movements after each signal
-        return new ArrayList<>();
-    }
-
-    private double getPriceAfterDays(List<BinanceHistoricalService.OHLCData> data, int startIndex, int days) {
-        int targetIndex = Math.min(startIndex + days, data.size() - 1);
-        return data.get(targetIndex).close();
-    }
-
     private double calculateChange(double startPrice, double endPrice) {
         return ((endPrice - startPrice) / startPrice) * 100;
-    }
-
-    private boolean isSignificantMove(double startPrice, double endPrice) {
-        double changePercent = Math.abs(calculateChange(startPrice, endPrice));
-        return changePercent > 3.0; // 3% or more is "significant"
-    }
-
-    private SignalPerformance analyzeSignalPerformance(String signalType, List<SignalOutcome> outcomes) {
-        SignalPerformance performance = new SignalPerformance();
-        performance.setSignalType(signalType);
-        performance.setTotalSignals(outcomes.size());
-
-        if (outcomes.isEmpty()) return performance;
-
-        // Calculate average returns
-        double avg7Day = outcomes.stream()
-                .mapToDouble(SignalOutcome::getPriceChange7Days)
-                .average().orElse(0);
-        double avg14Day = outcomes.stream()
-                .mapToDouble(SignalOutcome::getPriceChange14Days)
-                .average().orElse(0);
-        double avg30Day = outcomes.stream()
-                .mapToDouble(SignalOutcome::getPriceChange30Days)
-                .average().orElse(0);
-
-        // Calculate success rates
-        long successful7Day = outcomes.stream()
-                .filter(o -> o.getPriceChange7Days() > 0)
-                .count();
-        long successful14Day = outcomes.stream()
-                .filter(o -> o.getPriceChange14Days() > 0)
-                .count();
-        long successful30Day = outcomes.stream()
-                .filter(o -> o.getPriceChange30Days() > 0)
-                .count();
-
-        performance.setAverageReturn7Days(avg7Day);
-        performance.setAverageReturn14Days(avg14Day);
-        performance.setAverageReturn30Days(avg30Day);
-        performance.setSuccessRate7Days((successful7Day * 100.0) / outcomes.size());
-        performance.setSuccessRate14Days((successful14Day * 100.0) / outcomes.size());
-        performance.setSuccessRate30Days((successful30Day * 100.0) / outcomes.size());
-
-        return performance;
-    }
-
-    private FibStats calculateFibStats(int fibNumber, List<Double> changes) {
-        FibStats stats = new FibStats();
-        stats.setSampleSize(changes.size());
-        stats.setAverageChange(changes.stream().mapToDouble(Double::doubleValue).average().orElse(0));
-        stats.setMaxChange(changes.stream().mapToDouble(Double::doubleValue).max().orElse(0));
-        stats.setMinChange(changes.stream().mapToDouble(Double::doubleValue).min().orElse(0));
-
-        // Calculate standard deviation
-        double mean = stats.getAverageChange();
-        double variance = changes.stream()
-                .mapToDouble(c -> Math.pow(c - mean, 2))
-                .average().orElse(0);
-        stats.setStdDev(Math.sqrt(variance));
-
-        // Success rate (positive changes)
-        double successRate = changes.stream()
-                .filter(c -> c > 0)
-                .count() * 100.0 / changes.size();
-        stats.setSuccessRate(successRate);
-
-        return stats;
-    }
-
-    private LocalDate toLocalDate(long timestamp) {
-        return Instant.ofEpochMilli(timestamp)
-                .atZone(ZoneId.systemDefault())
-                .toLocalDate();
     }
 
     private FibonacciPerformance createEmptyFibonacciPerformance(String symbol) {
@@ -462,36 +481,7 @@ public class BacktestService {
 
     // ===== DATA MODELS =====
 
-    @Data
-    public static class BacktestResult {
-        private String symbol;
-        private String testPeriod;
-        private int totalSignals;
-        private List<SignalOutcome> signalOutcomes;
-        private double overallSuccessRate;
-        private double averageReturn;
-
-        public void calculateStatistics() {
-            if (signalOutcomes == null || signalOutcomes.isEmpty()) {
-                overallSuccessRate = 0;
-                averageReturn = 0;
-                return;
-            }
-
-            // Calculate average 7-day return
-            averageReturn = signalOutcomes.stream()
-                    .mapToDouble(SignalOutcome::getPriceChange7Days)
-                    .average().orElse(0);
-
-            // Calculate success rate (positive returns)
-            long successful = signalOutcomes.stream()
-                    .filter(o -> o.getPriceChange7Days() > 0)
-                    .count();
-            overallSuccessRate = (successful * 100.0) / signalOutcomes.size();
-        }
-    }
-
-    @Data
+   @Data
     public static class SignalOutcome {
         private LocalDate signalDate;
         private String signalType;
@@ -529,11 +519,6 @@ public class BacktestService {
         private double minChange;
         private double stdDev;
         private double successRate; // Percentage of positive changes
-
-        // Helper to get label
-        public String getRatioLabel() {
-            return String.format("Fib %.3f", ratio);
-        }
 
         // Helper to get days (assuming 100-day base)
         public int getDays() {
