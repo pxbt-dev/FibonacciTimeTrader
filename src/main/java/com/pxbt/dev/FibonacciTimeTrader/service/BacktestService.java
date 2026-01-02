@@ -1868,7 +1868,6 @@ public class BacktestService {
         return pivots;
     }
 
-
     // Calculate cycle performance with more metrics
     private Map<String, Object> analyzeGannCyclePerformance(List<Double> changes, int period) {
         Map<String, Object> stats = new HashMap<>();
