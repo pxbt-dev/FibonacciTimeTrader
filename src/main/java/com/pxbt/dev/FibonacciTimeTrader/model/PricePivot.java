@@ -1,12 +1,16 @@
 package com.pxbt.dev.FibonacciTimeTrader.model;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
 import java.time.LocalDate;
 
 @Data
 public class PricePivot {
+
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate date;
+
     private double price;
     private String type; // "HIGH" or "LOW"
     private double strength; // 0-1 scale

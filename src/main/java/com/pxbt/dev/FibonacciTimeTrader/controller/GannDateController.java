@@ -102,9 +102,9 @@ public class GannDateController {
 
         // For BTC: Use known major pivots
         if (symbol.equals("BTC")) {
-            pivots.add(new PricePivot(LocalDate.of(2018, 12, 15), 3100.0, "MAJOR_LOW", 1.0));
+//            pivots.add(new PricePivot(LocalDate.of(2018, 12, 15), 3100.0, "MAJOR_LOW", 1.0));
             pivots.add(new PricePivot(LocalDate.of(2023, 1, 1), 15455.0, "MAJOR_LOW", 0.9));
-            pivots.add(new PricePivot(LocalDate.of(2024, 3, 1), 72000.0, "MAJOR_HIGH", 0.8));
+//            pivots.add(new PricePivot(LocalDate.of(2024, 3, 1), 72000.0, "MAJOR_HIGH", 0.8));
             pivots.add(new PricePivot(LocalDate.of(2025, 10, 1), 126272.76, "MAJOR_HIGH", 1.0));
 
             log.info("💰 BTC: Using 4 major cycle pivots for Gann dates");
@@ -390,7 +390,7 @@ public class GannDateController {
     /**
      * Internal method to get Gann dates
      */
-    private List<GannDate> getGannDatesInternal(String symbol) {
+    List<GannDate> getGannDatesInternal(String symbol) {
         List<BinanceHistoricalService.OHLCData> historicalData =
                 binanceHistoricalService.getHistoricalData(symbol);
 

@@ -33,7 +33,7 @@ public class BinanceHistoricalService {
         loadExtendedHistoricalData();
     }
 
-    private void loadExtendedHistoricalData() {
+    void loadExtendedHistoricalData() {
         try {
             Map<String, List<OHLCData>> allData = new HashMap<>();
             String[] symbols = {"BTC", "SOL", "TAO", "WIF"};
@@ -239,14 +239,26 @@ public class BinanceHistoricalService {
     public List<OHLCData> getHistoricalData(String symbol) {
         List<OHLCData> data = currentData.getOrDefault(symbol, new ArrayList<>());
 
+        // DEBUG LOGGING
+        log.info("📊 BinanceHistoricalService.getHistoricalData called for {}", symbol);
+        log.info("📊 Data in cache: {} points", data.size());
+
+
         // Log data availability
         if (!data.isEmpty()) {
             LocalDate start = convertTimestampToDate(data.get(0).timestamp());
             LocalDate end = convertTimestampToDate(data.get(data.size()-1).timestamp());
             long days = java.time.temporal.ChronoUnit.DAYS.between(start, end);
 
-            log.debug("📊 {}: Returning {} data points ({} to {}, {:.1f} years)",
+            log.debug("📊 {}: Returning {} data points ({} to {}, {} years)",
                     symbol, data.size(), start, end, days / 365.0);
+        }
+
+        if (data.isEmpty()) {
+            log.warn("⚠️ No historical data found for {}. Loading now...", symbol);
+            loadExtendedHistoricalData(); // Try to load
+            data = currentData.getOrDefault(symbol, new ArrayList<>());
+            log.info("📊 After loading: {} points", data.size());
         }
 
         return new ArrayList<>(data);

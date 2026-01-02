@@ -8,7 +8,9 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -62,6 +64,9 @@ public class TimeGeometryService {
 
     @Autowired
     private SolarForecastService solarForecastService;
+
+    @Autowired
+    LunarDataService lunarDataService;
 
     public VortexAnalysis analyzeSymbol(String symbol) {
         log.info("⏰ MAJOR CYCLE ANALYSIS FOR {}", symbol);
@@ -168,7 +173,7 @@ public class TimeGeometryService {
         timeMap.put(2.333, "233 days (Harmonic 2.333)");
         timeMap.put(2.500, "250 days (Geometric 2.5)");
         timeMap.put(2.667, "267 days (Harmonic 2.667)");
-        timeMap.put(3.000, "300 days (Triple)");
+        timeMap.put(3.000, "300 days (300% extension)");
 
         for (Map.Entry<Double, String> entry : timeMap.entrySet()) {
             double ratio = entry.getKey();
@@ -195,10 +200,14 @@ public class TimeGeometryService {
             projection.setType("TIME_PROJECTION");
             projection.setPriceTarget(0);
 
-            projection.setDescription(String.format("%s: %s from %s high",
+            projection.setDescription(String.format("%s: %s from %s cycle high",
                     ratio == 0.333 || ratio == 0.667 ? "Harmonic" :
-                            ratio == 1.5 || ratio == 2.5 ? "Geometric" : "Fib",
-                    daysLabel, cycleHigh.getDate()));
+                            ratio == 1.5 || ratio == 2.5 ? "Geometric" :
+                                    ratio == 2.0 ? "200% extension" :
+                                            ratio == 3.0 ? "300% extension" :
+                                                    ratio == 4.0 ? "400% extension" : "Fib",
+                    daysLabel,
+                    cycleHigh.getDate().format(DateTimeFormatter.ofPattern("MMM d, yyyy"))));
 
             projections.add(projection);
         }
@@ -455,9 +464,6 @@ public class TimeGeometryService {
         return gannDates;
     }
 
-    /**
-     * Enhanced vortex windows with proper solar integration
-     */
     private List<VortexWindow> identifyMajorVortexWindows(
             List<FibonacciTimeProjection> timeProjections,
             List<GannDate> gannDates) {
@@ -471,8 +477,19 @@ public class TimeGeometryService {
             log.info("🌀 Processing {} time projections", timeProjections.size());
             timeProjections.forEach(p -> {
                 if (!p.getDate().isBefore(LocalDate.now())) {
-                    String ratioLabel = String.format("%.3f", p.getFibonacciRatio());
+                    // Get the actual ratio, not just the rounded display
+                    double actualRatio = p.getFibonacciRatio();
+                    String ratioLabel = String.format("%.3f", actualRatio);
+
+                    // Determine ratio type for signal naming
+                    String ratioType = getFibRatioType(actualRatio);
                     String signal = "FIB_" + ratioLabel;
+
+                    // Add additional metadata for lunar alignment detection
+                    if (isMajorFibRatio(actualRatio)) {
+                        signal = "FIB_MAJOR_" + ratioLabel;
+                    }
+
                     signals.computeIfAbsent(p.getDate(), k -> new ArrayList<>())
                             .add(signal);
                     log.debug("🌀 Added Fibonacci signal {} for {}", signal, p.getDate());
@@ -487,9 +504,14 @@ public class TimeGeometryService {
             log.info("🌀 Processing {} Gann dates", gannDates.size());
             gannDates.forEach(g -> {
                 if (!g.getDate().isBefore(LocalDate.now())) {
+                    // Extract period from type (e.g., "90D_ANNIVERSARY" -> "90")
+                    String period = g.getType().replace("D_ANNIVERSARY", "");
+
+                    // Add Gann period to signal for better identification
+                    String signal = "GANN_" + period + "D";
                     signals.computeIfAbsent(g.getDate(), k -> new ArrayList<>())
-                            .add(g.getType());
-                    log.debug("🌀 Added Gann signal {} for {}", g.getType(), g.getDate());
+                            .add(signal);
+                    log.debug("🌀 Added Gann signal {} for {}", signal, g.getDate());
                 }
             });
         } else {
@@ -514,72 +536,372 @@ public class TimeGeometryService {
             log.warn("Solar data unavailable: {}", e.getMessage());
         }
 
-        // Debug: Show all signal dates
-        log.info("🌀 Total signal dates: {}", signals.size());
-        signals.forEach((date, sigList) -> {
-            log.debug("🌀 Date {}: {} signals - {}", date, sigList.size(), sigList);
-        });
+        // 4. Add Lunar events
+        try {
+            // Get lunar events for next 6 months
+            LocalDate sixMonthsFromNow = LocalDate.now().plusMonths(6);
 
-        // 4. Create vortex windows
+            // Convert LocalDate to Date for the service call
+            Date startDate = Date.from(LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant());
+            Date endDate = Date.from(sixMonthsFromNow.atStartOfDay(ZoneId.systemDefault()).toInstant());
+
+            List<LunarEvent> lunarEvents = lunarDataService.getEventsBetween(startDate, endDate);
+
+            if (lunarEvents != null && !lunarEvents.isEmpty()) {
+                log.info("🌙 Processing {} lunar events", lunarEvents.size());
+
+                for (LunarEvent lunarEvent : lunarEvents) {
+                    // Convert Date to LocalDate
+                    LocalDate eventDate = lunarEvent.getDate().toInstant()
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate();
+
+                    // Only add future dates
+                    if (!eventDate.isBefore(LocalDate.now())) {
+                        String eventType = lunarEvent.getEventType().toUpperCase();
+                        String signal = "LUNAR_" + eventType;
+
+                        signals.computeIfAbsent(eventDate, k -> new ArrayList<>())
+                                .add(signal);
+
+                        log.debug("🌙 Added Lunar signal {} for {}",
+                                signal, eventDate);
+                    }
+                }
+
+                // Log counts
+                long fullMoonCount = lunarEvents.stream()
+                        .filter(e -> "FULL_MOON".equals(e.getEventType()))
+                        .count();
+                long newMoonCount = lunarEvents.stream()
+                        .filter(e -> "NEW_MOON".equals(e.getEventType()))
+                        .count();
+
+                log.info("🌙 Found {} Full Moons and {} New Moons in next 6 months",
+                        fullMoonCount, newMoonCount);
+            }
+        } catch (Exception e) {
+            log.warn("Lunar data unavailable: {}", e.getMessage());
+        }
+
+        // 5. Detect Fibonacci-Lunar harmonic alignments
+        try {
+            List<LunarEvent> allLunarEvents = lunarDataService.getLunarEvents();
+
+            for (FibonacciTimeProjection fib : timeProjections) {
+                if (!fib.getDate().isBefore(LocalDate.now())) {
+                    for (LunarEvent lunar : allLunarEvents) {
+                        // Convert lunar Date to LocalDate
+                        LocalDate lunarDate = lunar.getDate().toInstant()
+                                .atZone(ZoneId.systemDefault())
+                                .toLocalDate();
+
+                        // Check if lunar event is within 1 day of Fibonacci date
+                        long daysBetween = Math.abs(java.time.temporal.ChronoUnit.DAYS.between(
+                                fib.getDate(), lunarDate));
+
+                        if (daysBetween <= 1) {
+                            // This is a harmonic alignment
+                            String harmonicSignal = "HARMONIC_FIB_" +
+                                    String.format("%.3f", fib.getFibonacciRatio()) +
+                                    "_LUNAR_" + lunar.getEventType().toUpperCase();
+
+                            signals.computeIfAbsent(fib.getDate(), k -> new ArrayList<>())
+                                    .add(harmonicSignal);
+
+                            log.debug("🌀 Detected Fibonacci-Lunar harmonic: {} on {}",
+                                    harmonicSignal, fib.getDate());
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Fibonacci-Lunar harmonic detection skipped: {}", e.getMessage());
+        }
+
+        // ✅ 5. Detect Fibonacci-Lunar harmonic alignments
+        detectFibonacciLunarHarmonics(signals, timeProjections);
+
+        // Debug: Show all signal dates
+        log.info("🌀 Total signal dates before filtering: {}", signals.size());
+        if (log.isDebugEnabled()) {
+            signals.forEach((date, sigList) -> {
+                log.debug("🌀 Date {}: {} signals - {}", date, sigList.size(), sigList);
+            });
+        }
+
+        // 6. Create vortex windows
         List<VortexWindow> windows = new ArrayList<>();
         for (Map.Entry<LocalDate, List<String>> entry : signals.entrySet()) {
             List<String> allSignals = entry.getValue();
 
-            // Skip if only solar signals
+            // Skip if only single signal type
             long solarCount = allSignals.stream()
                     .filter(s -> s.startsWith("SOLAR_AP_"))
                     .count();
-            long fibGannCount = allSignals.size() - solarCount;
+            long lunarCount = allSignals.stream()
+                    .filter(s -> s.startsWith("LUNAR_"))
+                    .count();
+            long fibGannCount = allSignals.size() - solarCount - lunarCount;
 
-            if (allSignals.size() >= 2 && fibGannCount >= 1) {
+            // ✅ UPDATED: Enhanced confluence criteria
+            boolean hasConfluence = false;
+
+            // Criterion 1: At least 2 Fibonacci/Gann signals
+            if (allSignals.size() >= 2 && fibGannCount >= 2) {
+                hasConfluence = true;
+            }
+            // Criterion 2: Fibonacci/Gann + Lunar event
+            else if (fibGannCount >= 1 && allSignals.stream().anyMatch(s -> s.startsWith("LUNAR_"))) {
+                hasConfluence = true;
+            }
+            // Criterion 3: Fibonacci/Gann + Strong Solar
+            else if (fibGannCount >= 1 && hasStrongSolarEvent(allSignals)) {
+                hasConfluence = true;
+            }
+            // Criterion 4: Multiple lunar harmonics with Fibonacci
+            else if (hasLunarFibonacciHarmonic(allSignals)) {
+                hasConfluence = true;
+            }
+
+            if (hasConfluence) {
                 VortexWindow window = new VortexWindow();
                 window.setDate(entry.getKey());
                 window.setIntensity(calculateVortexIntensity(allSignals));
-                window.setType("VORTEX_WINDOW");
+                window.setType(determineVortexType(allSignals));
                 window.setContributingFactors(allSignals);
                 window.setDescription(buildVortexDescription(allSignals));
 
                 windows.add(window);
 
-                log.info("🌀 Created vortex window for {} with {} signals: {}",
-                        entry.getKey(), allSignals.size(), allSignals);
+                log.info("🌀 Created vortex window for {} with {} signals ({} fib/gann, {} solar, {} lunar): {}",
+                        entry.getKey(), allSignals.size(), fibGannCount, solarCount, lunarCount,
+                        allSignals.stream().limit(3).collect(Collectors.toList()));
             }
         }
 
+        // Sort windows by intensity (highest first)
+        windows.sort((a, b) -> Double.compare(b.getIntensity(), a.getIntensity()));
+
         log.info("🌀 Generated {} vortex windows total", windows.size());
+
+        // Log strongest windows
+        if (!windows.isEmpty()) {
+            log.info("🌀 STRONGEST VORTEX WINDOWS:");
+            windows.stream()
+                    .limit(5)
+                    .forEach(w -> log.info("   {}: {} intensity - {}",
+                            w.getDate(),
+                            String.format("%.2f", w.getIntensity()),
+                            w.getDescription()));
+        }
+
         return windows;
     }
 
-    /**
-     * Calculate vortex intensity based on signal composition
-     */
+    // Helper method to detect Fibonacci-Lunar harmonic alignments
+    private void detectFibonacciLunarHarmonics(Map<LocalDate, List<String>> signals,
+                                               List<FibonacciTimeProjection> fibProjections) {
+        if (fibProjections == null || fibProjections.isEmpty()) return;
+
+        try {
+            // Get lunar events for the next year
+            LocalDate oneYearFromNow = LocalDate.now().plusYears(1);
+            Date startDate = Date.from(LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant());
+            Date endDate = Date.from(oneYearFromNow.atStartOfDay(ZoneId.systemDefault()).toInstant());
+
+            List<LunarEvent> lunarEvents = lunarDataService.getEventsBetween(startDate, endDate);
+
+            for (FibonacciTimeProjection fib : fibProjections) {
+                if (!fib.getDate().isBefore(LocalDate.now())) {
+                    for (LunarEvent lunar : lunarEvents) {
+                        // Convert lunar Date to LocalDate
+                        LocalDate lunarDate = lunar.getDate().toInstant()
+                                .atZone(ZoneId.systemDefault())
+                                .toLocalDate();
+
+                        // Check if lunar event is within 1 day of Fibonacci date
+                        long daysBetween = Math.abs(java.time.temporal.ChronoUnit.DAYS.between(
+                                fib.getDate(), lunarDate));
+
+                        if (daysBetween <= 1) {
+                            // This is a harmonic alignment
+                            String harmonicSignal = "HARMONIC_FIB_" +
+                                    String.format("%.3f", fib.getFibonacciRatio()) +
+                                    "_LUNAR_" + lunar.getEventType().toUpperCase().replace(" ", "_");
+
+                            signals.computeIfAbsent(fib.getDate(), k -> new ArrayList<>())
+                                    .add(harmonicSignal);
+
+                            log.debug("🌀 Detected Fibonacci-Lunar harmonic: {} on {}",
+                                    harmonicSignal, fib.getDate());
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Fibonacci-Lunar harmonic detection skipped: {}", e.getMessage());
+        }
+    }
+
+    // Helper method to determine Fibonacci ratio type
+    private String getFibRatioType(double ratio) {
+        // Major Fibonacci ratios
+        double[] majorRatios = {0.382, 0.5, 0.618, 0.786, 1.618, 2.618};
+        for (double major : majorRatios) {
+            if (Math.abs(ratio - major) < 0.001) {
+                return "MAJOR";
+            }
+        }
+
+        // Harmonic ratios (multiples of 1/3)
+        if (Math.abs(ratio % (1.0/3.0)) < 0.001) {
+            return "HARMONIC";
+        }
+
+        // Geometric ratios (multiples of 0.5)
+        if (Math.abs(ratio % 0.5) < 0.001) {
+            return "GEOMETRIC";
+        }
+
+        return "STANDARD";
+    }
+
+    // Check if Fibonacci ratio is major
+    private boolean isMajorFibRatio(double ratio) {
+        double[] majorRatios = {0.382, 0.5, 0.618, 0.786, 1.0, 1.272, 1.618, 2.618};
+        for (double major : majorRatios) {
+            if (Math.abs(ratio - major) < 0.001) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Check for major lunar events
+    private boolean hasMajorLunarEvent(List<String> signals) {
+        return signals.stream()
+                .anyMatch(s -> s.startsWith("LUNAR_ECLIPSE") ||
+                        s.startsWith("LUNAR_SUPER_MOON") ||
+                        (s.startsWith("LUNAR_") && s.contains("HIGH")));
+    }
+
+    // Check for strong solar events
+    private boolean hasStrongSolarEvent(List<String> signals) {
+        return signals.stream()
+                .anyMatch(s -> s.startsWith("SOLAR_AP_") &&
+                        Integer.parseInt(s.replace("SOLAR_AP_", "")) >= 30);
+    }
+
+    // Check for lunar-Fibonacci harmonics
+    private boolean hasLunarFibonacciHarmonic(List<String> signals) {
+        long lunarCount = signals.stream()
+                .filter(s -> s.startsWith("LUNAR_"))
+                .count();
+        long fibCount = signals.stream()
+                .filter(s -> s.startsWith("FIB_"))
+                .count();
+        long harmonicCount = signals.stream()
+                .filter(s -> s.startsWith("HARMONIC_"))
+                .count();
+
+        return (lunarCount >= 2 && fibCount >= 1) || harmonicCount >= 1;
+    }
+
+    // Enhanced vortex type determination
+    private String determineVortexType(List<String> signals) {
+        long fibCount = signals.stream().filter(s -> s.startsWith("FIB_")).count();
+        long gannCount = signals.stream().filter(s -> s.startsWith("GANN_")).count();
+        long lunarCount = signals.stream().filter(s -> s.startsWith("LUNAR_")).count();
+        long solarCount = signals.stream().filter(s -> s.startsWith("SOLAR_AP_")).count();
+        long harmonicCount = signals.stream().filter(s -> s.startsWith("HARMONIC_")).count();
+
+        if (harmonicCount > 0) {
+            return "HARMONIC_VORTEX";
+        } else if (lunarCount >= 2 && (fibCount > 0 || gannCount > 0)) {
+            return "LUNAR_VORTEX";
+        } else if (fibCount >= 2 && gannCount >= 1) {
+            return "MAJOR_RESONANCE";
+        } else if (solarCount >= 1 && (fibCount > 0 || gannCount > 0)) {
+            return "SOLAR_VORTEX";
+        } else if (fibCount >= 2) {
+            return "FIBONACCI_VORTEX";
+        } else if (gannCount >= 2) {
+            return "GANN_VORTEX";
+        }
+
+        return "STANDARD_VORTEX";
+    }
+
+    // Enhanced vortex intensity calculation
     private double calculateVortexIntensity(List<String> signals) {
-        double base = signals.size() * 0.3;
+        double base = signals.size() * 0.25; // Start with signal count
 
-        // Boost for Fibonacci/Gann combinations
+        // Boost for different signal types
         boolean hasFib = signals.stream().anyMatch(s -> s.startsWith("FIB_"));
-        boolean hasGann = signals.stream().anyMatch(s -> s.contains("ANNIVERSARY"));
+        boolean hasGann = signals.stream().anyMatch(s -> s.startsWith("GANN_"));
         boolean hasSolar = signals.stream().anyMatch(s -> s.startsWith("SOLAR_AP_"));
+        boolean hasLunar = signals.stream().anyMatch(s -> s.startsWith("LUNAR_"));
+        boolean hasHarmonic = signals.stream().anyMatch(s -> s.startsWith("HARMONIC_"));
 
-        if (hasFib && hasGann) base += 0.2;
-        if (hasSolar && (hasFib || hasGann)) base += 0.1;
+        // Type bonuses
+        if (hasFib && hasGann) base += 0.3;
+        if (hasHarmonic) base += 0.4;
+        if (hasLunar && (hasFib || hasGann)) base += 0.2;
+        if (hasSolar && (hasFib || hasGann)) base += 0.15;
 
+        // Major event bonuses
+        boolean hasMajorLunar = signals.stream()
+                .anyMatch(s -> s.startsWith("LUNAR_ECLIPSE") || s.startsWith("LUNAR_SUPER_MOON"));
+        boolean hasStrongSolar = signals.stream()
+                .anyMatch(s -> s.startsWith("SOLAR_AP_") &&
+                        Integer.parseInt(s.replace("SOLAR_AP_", "")) >= 30);
+
+        if (hasMajorLunar) base += 0.25;
+        if (hasStrongSolar) base += 0.2;
+
+        // Major Fibonacci ratio bonus
+        long majorFibCount = signals.stream()
+                .filter(s -> s.startsWith("FIB_MAJOR_"))
+                .count();
+        base += majorFibCount * 0.1;
+
+        // Cap at 0.95
         return Math.min(base, 0.95);
     }
 
-    /**
-     * Build vortex description based on signal types
-     */
+    // Confluence description builder
     private String buildVortexDescription(List<String> signals) {
         long fibCount = signals.stream().filter(s -> s.startsWith("FIB_")).count();
-        long gannCount = signals.stream().filter(s -> s.contains("_ANNIVERSARY")).count();
+        long gannCount = signals.stream().filter(s -> s.startsWith("GANN_")).count();
+        long lunarCount = signals.stream().filter(s -> s.startsWith("LUNAR_")).count();
         long solarCount = signals.stream().filter(s -> s.startsWith("SOLAR_AP_")).count();
+        long harmonicCount = signals.stream().filter(s -> s.startsWith("HARMONIC_")).count();
 
         List<String> parts = new ArrayList<>();
 
         if (fibCount > 0) parts.add(fibCount + " Fibonacci");
         if (gannCount > 0) parts.add(gannCount + " Gann");
+        if (lunarCount > 0) parts.add(lunarCount + " Lunar");
         if (solarCount > 0) parts.add(solarCount + " Solar");
+        if (harmonicCount > 0) parts.add(harmonicCount + " Harmonic");
+
+        // Add specific lunar events if present
+        signals.stream()
+                .filter(s -> s.startsWith("LUNAR_ECLIPSE") || s.startsWith("LUNAR_SUPER_MOON"))
+                .findFirst()
+                .ifPresent(majorLunar -> {
+                    parts.add(majorLunar.replace("LUNAR_", "").replace("_", " "));
+                });
+
+        // Add strong solar if present
+        signals.stream()
+                .filter(s -> s.startsWith("SOLAR_AP_") &&
+                        Integer.parseInt(s.replace("SOLAR_AP_", "")) >= 30)
+                .findFirst()
+                .ifPresent(strongSolar -> {
+                    parts.add("Strong Solar (AP ≥ 30)");
+                });
 
         return String.join(" • ", parts) + " confluence";
     }
@@ -641,5 +963,6 @@ public class TimeGeometryService {
                 .atZone(ZoneId.systemDefault())
                 .toLocalDate();
     }
+
 
 }
