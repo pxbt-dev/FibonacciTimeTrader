@@ -34,6 +34,7 @@ public class BacktestService {
     public FibonacciPerformance backtestFibonacciProjections(String symbol) {
         log.info("🔬 Backtesting Fibonacci & Harmonic projections for {}", symbol);
 
+        // ✅ CORRECT: Load data on-demand
         List<BinanceHistoricalService.OHLCData> historicalData =
                 binanceHistoricalService.getHistoricalData(symbol);
 
@@ -47,20 +48,14 @@ public class BacktestService {
                     convertTimestampToDate(historicalData.get(historicalData.size()-1).timestamp()));
         }
 
-        if (historicalData == null || historicalData.size() < 500) {
-            log.warn("⚠️ Insufficient data for backtest: {} points",
+        // ✅ FIXED: Remove the reload attempt - getHistoricalData() already handles it
+        if (historicalData == null || historicalData.size() < 100) { // Reduced from 500 to 100
+            log.error("❌ Insufficient data for backtest: {} points",
                     historicalData != null ? historicalData.size() : 0);
-            // Try to load data
-            binanceHistoricalService.loadExtendedHistoricalData();
-            historicalData = binanceHistoricalService.getHistoricalData(symbol);
-
-            if (historicalData == null || historicalData.size() < 100) {
-                log.error("❌ Still insufficient data after reload: {} points",
-                        historicalData != null ? historicalData.size() : 0);
-                return createEmptyFibonacciPerformance(symbol);
-            }
+            return createEmptyFibonacciPerformance(symbol);
         }
 
+        // ✅ REST OF YOUR CODE STAYS THE SAME...
         // Use DOUBLE for ratios, store results keyed by ratio
         Map<Double, List<Double>> fibResults = new HashMap<>();
 
@@ -115,8 +110,8 @@ public class BacktestService {
                                 isRatio(ratio, 2.333) || isRatio(ratio, 2.667) ||
                                 isRatio(ratio, 3.333) || isRatio(ratio, 3.667) ? "Harmonic" :
                                 isRatio(ratio, 1.5) || isRatio(ratio, 2.5) || isRatio(ratio, 3.5) ? "Geometric" :
-                                        isRatio(ratio, 2.0) ? "Double" :
-                                                isRatio(ratio, 3.0) ? "Triple" : "Fibonacci";
+                                        isRatio(ratio, 2.0) ? "200% extension" :
+                                                isRatio(ratio, 3.0) ? "300% extension" : "Fibonacci";
 
                 log.info("{} {} ({} days): {} samples, {} success, {}% avg return",
                         ratioType, String.format("%.3f", ratio), days, changes.size(),
