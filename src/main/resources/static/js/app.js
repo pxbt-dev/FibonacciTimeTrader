@@ -557,8 +557,8 @@ class TimeGeometryDashboard {
                 <div class="date-card gann-date-card ${isRecent ? 'border-warning' : ''}">
                     <div class="date">
                         ${this.formatDate(gann.date)}
-                        <span class="badge bg-success float-end">
-                            ${period}
+                        <span class="badge bg-purple float-end" style="background-color: #8b5cf6 !important;">
+                        ${period}
                         </span>
                     </div>
                     
@@ -2571,7 +2571,7 @@ ${activeCycles.length > 0 ? `
         }
 
         // Add row class for MAJOR pivots
-        const rowClass = isMajorPivot ? 'table-warning' : '';
+        const rowClass = isMajorPivot ? 'table-teal' : '';
 
         return `
         <tr class="${rowClass}">
