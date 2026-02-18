@@ -1246,7 +1246,6 @@ class TimeGeometryDashboard {
                         },
                         title: {
                             display: true,
-                            text: 'Feb 2026 - Feb 2027 Timeline',
                             color: '#f1f5f9',
                             font: {
                                 size: 14,
