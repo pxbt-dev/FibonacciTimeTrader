@@ -891,7 +891,6 @@ class TimeGeometryDashboard {
     }
 
     // Create timeline chart with ALL Gann dates
-// FIXED: Enhanced timeline chart with Lunar data
     createTimelineChart(analysis) {
         try {
             const ctx = document.getElementById('timelineChart');
@@ -905,8 +904,8 @@ class TimeGeometryDashboard {
             if (existingChart) existingChart.destroy();
 
             // Cutoff date: December 1, 2025
-            const cutoffDate = new Date('2025-12-01T00:00:00Z');
-            const endDate = new Date('2026-12-31T00:00:00Z');
+            const cutoffDate = new Date('2026-02-01T00:00:00Z');
+            const endDate = new Date('2027-02-28T00:00:00Z');
 
             // Get solar data if available
             const solarHighApDays = this.solarData?.forecast || [];
@@ -1247,15 +1246,15 @@ class TimeGeometryDashboard {
                         },
                         title: {
                             display: true,
-                            text: 'Dec 2025 - Dec 2026 Timeline',
+                            text: 'Feb 2026 - Frb 2027 Timeline',
                             color: '#f1f5f9',
                             font: {
                                 size: 14,
                                 weight: 'bold'
                             }
                         },
-                        min: '2025-12-01',
-                        max: '2026-12-31',
+                        min: '2026-02-01',
+                        max: '2027-02-28',
                         grid: {
                             color: 'rgba(255, 255, 255, 0.05)'
                         },
