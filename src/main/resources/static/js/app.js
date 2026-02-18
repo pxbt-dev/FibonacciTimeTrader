@@ -1470,8 +1470,14 @@ class TimeGeometryDashboard {
         const signals = [];
 
         factors.forEach((factor) => {
+            // Skip raw format signals - we only want clean labels
+            if (factor.startsWith('HARMONIC_FIB_') ||
+                factor.startsWith('GANN_') ||
+                factor === 'Triple 3.000') {
+                return; // Skip these raw/internal formats
+            }
+
             if (factor.startsWith('FIB_')) {
-                // ... existing Fibonacci parsing ...
                 const fibStr = factor.replace('FIB_', '');
                 let ratio, days;
 
@@ -1488,8 +1494,7 @@ class TimeGeometryDashboard {
                     label: this.getFibRatioLabel(ratio, days),
                     number: days,
                     ratio: ratio,
-                    days: days,
-                    rawFactor: factor
+                    days: days
                 });
             }
             else if (factor.includes('_ANNIVERSARY')) {
@@ -1500,19 +1505,14 @@ class TimeGeometryDashboard {
                     days: parseInt(days)
                 });
             }
-            else if (factor.includes('LUNAR_')) { // NEW: Lunar parsing
+            else if (factor.includes('LUNAR_')) {
                 const lunarType = factor.replace('LUNAR_', '');
                 let label = 'Lunar Event';
 
-                // Map lunar event types to readable labels
                 if (lunarType === 'NEW_MOON') {
                     label = '🌑 New Moon';
                 } else if (lunarType === 'FULL_MOON') {
                     label = '🌕 Full Moon';
-                } else if (lunarType === 'FIRST_QUARTER') {
-                    label = '🌓 First Quarter';
-                } else if (lunarType === 'LAST_QUARTER') {
-                    label = '🌗 Last Quarter';
                 } else {
                     label = `Lunar ${lunarType}`;
                 }
@@ -1520,20 +1520,13 @@ class TimeGeometryDashboard {
                 signals.push({
                     type: 'lunar',
                     label: label,
-                    lunarType: lunarType,
-                    rawFactor: factor
+                    lunarType: lunarType
                 });
             }
-            else if (factor.includes('SOLAR_')) {
+            // Keep the clean harmonic labels we created
+            else if (factor.includes(' + ')) {
                 signals.push({
-                    type: 'solar',
-                    label: factor.replace('SOLAR_AP_', 'Solar AP '),
-                    rawFactor: factor
-                });
-            }
-            else {
-                signals.push({
-                    type: 'other',
+                    type: 'harmonic',
                     label: factor,
                     rawFactor: factor
                 });

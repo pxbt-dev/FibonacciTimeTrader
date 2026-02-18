@@ -506,9 +506,7 @@ public class TimeGeometryService {
                 if (!g.getDate().isBefore(LocalDate.now())) {
                     // Extract period from type (e.g., "90D_ANNIVERSARY" -> "90")
                     String period = g.getType().replace("D_ANNIVERSARY", "");
-
-                    // Add Gann period to signal for better identification
-                    String signal = "GANN_" + period + "D";
+                    String signal = "GANN " + period + "D";
                     signals.computeIfAbsent(g.getDate(), k -> new ArrayList<>())
                             .add(signal);
                     log.debug("🌀 Added Gann signal {} for {}", signal, g.getDate());
@@ -715,26 +713,38 @@ public class TimeGeometryService {
             for (FibonacciTimeProjection fib : fibProjections) {
                 if (!fib.getDate().isBefore(LocalDate.now())) {
                     for (LunarEvent lunar : lunarEvents) {
-                        // Convert lunar Date to LocalDate
                         LocalDate lunarDate = lunar.getDate().toInstant()
                                 .atZone(ZoneId.systemDefault())
                                 .toLocalDate();
 
-                        // Check if lunar event is within 1 day of Fibonacci date
                         long daysBetween = Math.abs(java.time.temporal.ChronoUnit.DAYS.between(
                                 fib.getDate(), lunarDate));
 
                         if (daysBetween <= 1) {
-                            // This is a harmonic alignment
-                            String harmonicSignal = "HARMONIC_FIB_" +
-                                    String.format("%.3f", fib.getFibonacciRatio()) +
-                                    "_LUNAR_" + lunar.getEventType().toUpperCase().replace(" ", "_");
+                            // Create readable label
+                            String fibLabel;
+                            double ratio = fib.getFibonacciRatio();
+
+                            if (Math.abs(ratio - 3.0) < 0.001) {
+                                fibLabel = "Triple 3.000";
+                            } else if (Math.abs(ratio - 2.0) < 0.001) {
+                                fibLabel = "Double 2.000";
+                            } else if (Math.abs(ratio - 1.618) < 0.001) {
+                                fibLabel = "Golden 1.618";
+                            } else if (Math.abs(ratio - 0.618) < 0.001) {
+                                fibLabel = "Golden 0.618";
+                            } else {
+                                fibLabel = String.format("Fib %.3f", ratio);
+                            }
+
+                            String lunarType = lunar.getEventType().equals("FULL_MOON") ? "🌕 Full Moon" :
+                                    (lunar.getEventType().equals("NEW_MOON") ? "🌑 New Moon" : lunar.getEventType());
+
+                            // ONLY add the clean label, not the raw one
+                            String harmonicSignal = fibLabel + " + " + lunarType;
 
                             signals.computeIfAbsent(fib.getDate(), k -> new ArrayList<>())
                                     .add(harmonicSignal);
-
-                            log.debug("🌀 Detected Fibonacci-Lunar harmonic: {} on {}",
-                                    harmonicSignal, fib.getDate());
                         }
                     }
                 }

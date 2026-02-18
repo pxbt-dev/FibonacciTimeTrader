@@ -517,4 +517,38 @@ footer {
     background: var(--text-secondary);
 }
 
+/* Fix for badge overflow */
+.converging-signals {
+    background: rgba(30, 41, 59, 0.5);
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin: 0.5rem 0;
+    overflow: hidden;
+}
 
+.converging-signals .badge {
+    display: inline-block;
+    max-width: 100%;
+    white-space: normal;
+    word-wrap: break-word;
+    line-height: 1.4;
+    margin-bottom: 4px;
+    padding: 6px 10px;
+    font-size: 0.85rem;
+}
+
+/* Make the date card wider if needed */
+.date-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    transition: all 0.2s ease;
+    overflow: visible; /* Allow content to expand */
+}
+
+/* Ensure the column doesn't clip content */
+.col-lg-4 {
+    overflow: visible;
+}
